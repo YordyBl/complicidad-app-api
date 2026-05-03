@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output (not used currently, but guard against future tsc output)
+dist/
+
+# Environment files (secrets)
+.env
+.env.*
+
+# Git
+.git
+.gitignore
+
+# Logs
+*.log
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# IDE artifacts
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -1,0 +1,55 @@
+/**
+ * Sales / Returns module composition root.
+ *
+ * Wires the domain, application, infrastructure, and HTTP layers together.
+ * Called from the server bootstrap once the DataSource is available.
+ *
+ * NOTE: This module requires:
+ * - CustomerRepository (from customers module — cross-module dependency)
+ * - VariantRepository (from inventory module — cross-module dependency)
+ * - UnitOfWork with scope providing SaleRepository, InventoryLotRepository,
+ *   CashLedgerRepository
+ */
+import { Router } from 'express';
+import type { EntityManager } from 'typeorm';
+import type { UnitOfWork } from '../../shared/application/UnitOfWork.js';
+import { CustomerTypeOrmRepository } from '../customers/infrastructure/typeorm/CustomerTypeOrmRepository.js';
+import { VariantTypeOrmRepository } from '../inventory/infrastructure/typeorm/VariantTypeOrmRepository.js';
+import { CreateSaleUseCase } from './application/use-cases/CreateSaleUseCase.js';
+import { CancelSaleUseCase } from './application/use-cases/CancelSaleUseCase.js';
+import { ReturnFullSaleUseCase } from './application/use-cases/ReturnFullSaleUseCase.js';
+import { SaleController } from './interfaces/http/SaleController.js';
+import { createSaleRouter } from './interfaces/http/sale-routes.js';
+
+/**
+ * Create and wire the sales/returns module, returning an Express Router.
+ *
+ * @param manager - TypeORM EntityManager (from DataSource) or `undefined`.
+ * @param uow     - UnitOfWork instance for transactional operations.
+ */
+export function createSalesModule(manager?: EntityManager, uow?: UnitOfWork): Router {
+  if (!manager || !uow) {
+    const router = Router();
+    router.all('*', (_req, res) => {
+      res.status(503).json({
+        error: 'ServiceUnavailable',
+        message: 'Database not connected — sales endpoints unavailable',
+      });
+    });
+    return router;
+  }
+
+  // Infrastructure
+  const customerRepo = new CustomerTypeOrmRepository(manager);
+  const variantRepo = new VariantTypeOrmRepository(manager);
+
+  // Application use cases
+  const createSaleUseCase = new CreateSaleUseCase(customerRepo, variantRepo);
+  const cancelSaleUseCase = new CancelSaleUseCase();
+  const returnFullSaleUseCase = new ReturnFullSaleUseCase();
+
+  // HTTP controller
+  const controller = new SaleController(createSaleUseCase, cancelSaleUseCase, returnFullSaleUseCase, uow);
+
+  return createSaleRouter(controller);
+}
