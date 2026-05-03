@@ -2,14 +2,16 @@
  * TypeORM-backed implementation of the UserRepository port.
  *
  * Lives in infrastructure — the domain only depends on the port interface.
+ * Maps PostgreSQL unique-violation errors to domain-safe DuplicateUserEmailError.
  */
-import { Repository } from 'typeorm';
+import { Repository, QueryFailedError } from 'typeorm';
 import type { EntityManager } from 'typeorm';
 import type { UserRepository } from '../../domain/UserRepository.js';
 import type { User } from '../../domain/User.js';
 import type { UserId } from '../../domain/UserId.js';
 import { UserEntity } from './UserEntity.js';
 import { UserMapper } from './UserMapper.js';
+import { DuplicateUserEmailError } from '../../application/use-cases/RegisterUserUseCase.js';
 
 export class UserTypeOrmRepository implements UserRepository {
   private readonly repo: Repository<UserEntity>;
@@ -31,7 +33,21 @@ export class UserTypeOrmRepository implements UserRepository {
 
   async save(user: User): Promise<void> {
     const entity = this.mapper.toPersistence(user);
-    await this.repo.save(entity);
+    try {
+      await this.repo.save(entity);
+    } catch (error: unknown) {
+      if (error instanceof QueryFailedError) {
+        // PostgreSQL unique-violation error code
+        const pgErr = error as unknown as {
+          driverError?: { code?: string };
+          detail?: string;
+        };
+        if (pgErr.driverError?.code === '23505') {
+          throw new DuplicateUserEmailError();
+        }
+      }
+      throw error;
+    }
   }
 
   async delete(id: UserId): Promise<void> {

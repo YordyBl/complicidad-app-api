@@ -9,6 +9,7 @@ import { UserTypeOrmRepository } from './infrastructure/typeorm/UserTypeOrmRepos
 import { BcryptPasswordService } from './infrastructure/services/BcryptPasswordService.js';
 import { JwtTokenService } from './infrastructure/services/JwtTokenService.js';
 import { LoginUseCase } from './application/use-cases/LoginUseCase.js';
+import { RegisterUserUseCase } from './application/use-cases/RegisterUserUseCase.js';
 import { AuthController } from './interfaces/http/AuthController.js';
 import { createAuthRouter } from './interfaces/http/auth-routes.js';
 import { env } from '../../config/env.js';
@@ -37,7 +38,8 @@ export function createAuthModule(manager?: EntityManager): Router {
   const passwordHasher = new BcryptPasswordService();
   const tokenService = new JwtTokenService(env.jwt.secret);
   const loginUseCase = new LoginUseCase(userRepo, passwordHasher, tokenService);
-  const authController = new AuthController(loginUseCase);
+  const registerUseCase = new RegisterUserUseCase(userRepo, passwordHasher);
+  const authController = new AuthController(loginUseCase, registerUseCase);
 
   return createAuthRouter(authController);
 }
