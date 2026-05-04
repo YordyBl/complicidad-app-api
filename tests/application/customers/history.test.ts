@@ -69,6 +69,11 @@ class FakeSaleRepository implements SaleRepository {
       .filter((s) => s.customerId === customerId)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
+
+  async findAll(): Promise<SaleEntity[]> {
+    return Array.from(this.sales.values())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
 }
 
 class FakeUnitOfWork implements UnitOfWork {
@@ -113,6 +118,7 @@ function makeSaleLine(
     variantId,
     qty,
     Money.fromCents(unitPriceCents),
+    'regular',
     consumptions,
   );
 }

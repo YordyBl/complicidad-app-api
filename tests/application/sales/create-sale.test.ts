@@ -16,11 +16,13 @@ import type { CreateSaleCommand } from '../../../src/modules/sales-returns/appli
 import type { UnitOfWork, UnitOfWorkScope } from '../../../src/shared/application/UnitOfWork.js';
 import type { CustomerRepository } from '../../../src/modules/customers/domain/CustomerRepository.js';
 import type { VariantRepository } from '../../../src/modules/inventory/domain/VariantRepository.js';
+import type { ProductRepository } from '../../../src/modules/inventory/domain/ProductRepository.js';
 import type { InventoryLotRepository } from '../../../src/modules/inventory/domain/InventoryLotRepository.js';
 import type { SaleRepository } from '../../../src/modules/sales-returns/domain/SaleRepository.js';
 import type { CashLedgerRepository } from '../../../src/modules/accounting-reports/domain/CashLedgerRepository.js';
 import type { PurchaseLot } from '../../../src/modules/inventory/domain/PurchaseLot.js';
 import type { Variant } from '../../../src/modules/inventory/domain/Variant.js';
+import type { Product } from '../../../src/modules/inventory/domain/Product.js';
 import type { CashLedgerEntry } from '../../../src/modules/accounting-reports/domain/CashLedgerEntry.js';
 import type { VariantId } from '../../../src/modules/inventory/domain/VariantId.js';
 import type { PurchaseLotId } from '../../../src/modules/inventory/domain/PurchaseLotId.js';
@@ -30,6 +32,7 @@ import { Customer } from '../../../src/modules/customers/domain/Customer.js';
 import { CustomerId } from '../../../src/modules/customers/domain/CustomerId.js';
 import { Variant as VariantEntity } from '../../../src/modules/inventory/domain/Variant.js';
 import { VariantId as VariantIdEntity } from '../../../src/modules/inventory/domain/VariantId.js';
+import { Product as ProductEntity } from '../../../src/modules/inventory/domain/Product.js';
 import { ProductId as ProductIdEntity } from '../../../src/modules/inventory/domain/ProductId.js';
 import { Sku as SkuEntity } from '../../../src/modules/inventory/domain/Sku.js';
 import { PurchaseLot as PurchaseLotEntity } from '../../../src/modules/inventory/domain/PurchaseLot.js';
@@ -151,6 +154,39 @@ class FakeSaleRepository implements SaleRepository {
       .filter((s) => s.customerId === customerId)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
+
+  async findAll(): Promise<SaleEntity[]> {
+    return Array.from(this.sales.values())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+}
+
+class FakeProductRepository implements ProductRepository {
+  private products = new Map<string, Product>();
+
+  setProduct(p: Product): void {
+    this.products.set(p.id.toString(), p);
+  }
+
+  async findById(id: ProductId): Promise<Product | null> {
+    return this.products.get(id.toString()) ?? null;
+  }
+
+  async findByAlias(_alias: string): Promise<Product[]> {
+    return [];
+  }
+
+  async save(product: Product): Promise<void> {
+    this.products.set(product.id.toString(), product);
+  }
+
+  async delete(_id: ProductId): Promise<void> {
+    // no-op
+  }
+
+  async findAllActive(): Promise<Product[]> {
+    return Array.from(this.products.values()).filter((p) => p.isActive);
+  }
 }
 
 class FakeCashLedgerRepository implements CashLedgerRepository {
@@ -195,15 +231,29 @@ function createTestCustomer(id?: string): Customer {
   );
 }
 
-function createTestVariant(id?: string): VariantEntity {
-  const skuResult = SkuEntity.from('TEST-' + (id ?? 'V1'));
+function createTestVariant(id?: string, productId?: string): VariantEntity {
+  const skuResult = SkuEntity.from('test-' + (id ?? 'v1'));
   if (!skuResult.ok) throw new Error('Invalid SKU');
   return new VariantEntity(
     VariantIdEntity.from(id ?? 'v1'),
-    ProductIdEntity.generate(),
+    ProductIdEntity.from(productId ?? 'prod-1'),
     skuResult.value,
     {},
-    Money.fromCents(1000),
+    true,
+    new Date('2026-01-01'),
+    new Date('2026-01-01'),
+  );
+}
+
+function createTestProduct(id?: string, salePriceCents?: number, presalePriceCents?: number | null): ProductEntity {
+  return new ProductEntity(
+    ProductIdEntity.from(id ?? 'prod-1'),
+    'Test Product',
+    null,
+    'test-product',
+    Money.fromCents(salePriceCents ?? 2000),
+    presalePriceCents !== undefined && presalePriceCents !== null ? Money.fromCents(presalePriceCents) : null,
+    [],
     true,
     new Date('2026-01-01'),
     new Date('2026-01-01'),
@@ -234,6 +284,7 @@ function createTestLot(
 describe('CreateSaleUseCase', () => {
   let customerRepo: FakeCustomerRepository;
   let variantRepo: FakeVariantRepository;
+  let productRepo: FakeProductRepository;
   let lotRepo: FakeInventoryLotRepository;
   let saleRepo: FakeSaleRepository;
   let cashRepo: FakeCashLedgerRepository;
@@ -241,11 +292,15 @@ describe('CreateSaleUseCase', () => {
   let customer: Customer;
   let variant1: VariantEntity;
   let variant2: VariantEntity;
+  let product1: ProductEntity;
+  let product2: ProductEntity;
 
   beforeEach(() => {
     customer = createTestCustomer();
-    variant1 = createTestVariant('v1');
-    variant2 = createTestVariant('v2');
+    product1 = createTestProduct('prod-1', 2000);
+    product2 = createTestProduct('prod-2', 5000);
+    variant1 = createTestVariant('v1', 'prod-1');
+    variant2 = createTestVariant('v2', 'prod-2');
 
     customerRepo = new FakeCustomerRepository();
     customerRepo.setCustomer(customer);
@@ -254,11 +309,15 @@ describe('CreateSaleUseCase', () => {
     variantRepo.setVariant(variant1);
     variantRepo.setVariant(variant2);
 
+    productRepo = new FakeProductRepository();
+    productRepo.setProduct(product1);
+    productRepo.setProduct(product2);
+
     lotRepo = new FakeInventoryLotRepository();
     saleRepo = new FakeSaleRepository();
     cashRepo = new FakeCashLedgerRepository();
 
-    useCase = new CreateSaleUseCase(customerRepo, variantRepo);
+    useCase = new CreateSaleUseCase(customerRepo, variantRepo, productRepo);
   });
 
   function createUow(): FakeUnitOfWork {
@@ -278,8 +337,8 @@ describe('CreateSaleUseCase', () => {
         customerId: 'customer-1',
         channelReference: 'shopify-order-456',
         items: [
-          { variantId: 'v1', quantity: 3, unitPriceCents: 2000 },
-          { variantId: 'v2', quantity: 2, unitPriceCents: 5000 },
+          { variantId: 'v1', quantity: 3, priceType: 'regular' },
+          { variantId: 'v2', quantity: 2, priceType: 'regular' },
         ],
       };
 
@@ -289,12 +348,12 @@ describe('CreateSaleUseCase', () => {
       if (!result.ok) return;
 
       // Verify response totals
-      // Revenue: 3*2000 + 2*5000 = 6000 + 10000 = 16000
-      expect(result.value.totalRevenueCents).toBe(16000);
+      // Revenue: 3*2000 + 2*5000 = 6000 + 10000 = 16000 (from product sale prices)
+      expect(result.value.totalRevenue).toBe(160);
       // Cost: 3*500 + 2*1200 = 1500 + 2400 = 3900
-      expect(result.value.totalCostCents).toBe(3900);
+      expect(result.value.totalCost).toBe(39);
       // Profit: 16000 - 3900 = 12100
-      expect(result.value.grossProfitCents).toBe(12100);
+      expect(result.value.grossProfit).toBe(121);
       expect(result.value.saleId).toBeDefined();
 
       // Verify sale was persisted
@@ -326,7 +385,7 @@ describe('CreateSaleUseCase', () => {
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
         channelReference: 'web-order',
-        items: [{ variantId: 'v1', quantity: 7, unitPriceCents: 1000 }],
+        items: [{ variantId: 'v1', quantity: 7, priceType: 'regular' }],
       };
 
       const result = await useCase.execute(command, createUow());
@@ -336,9 +395,10 @@ describe('CreateSaleUseCase', () => {
 
       // Should consume 5 from old lot (200 each) + 2 from new lot (500 each)
       // Cost: 5*200 + 2*500 = 1000 + 1000 = 2000
-      expect(result.value.totalCostCents).toBe(2000);
-      expect(result.value.totalRevenueCents).toBe(7000);
-      expect(result.value.grossProfitCents).toBe(5000);
+      // Revenue: 7 * 2000 (product sale price) = 14000
+      expect(result.value.totalCost).toBe(20);
+      expect(result.value.totalRevenue).toBe(140);
+      expect(result.value.grossProfit).toBe(120);
 
       // Verify remaining quantities
       const oldLot = lotRepo.lots.get('lot-old');
@@ -358,7 +418,7 @@ describe('CreateSaleUseCase', () => {
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
         channelReference: 'web-order',
-        items: [{ variantId: 'v1', quantity: 10, unitPriceCents: 1000 }],
+        items: [{ variantId: 'v1', quantity: 10, priceType: 'regular' }],
       };
 
       const result = await useCase.execute(command, createUow());
@@ -373,7 +433,7 @@ describe('CreateSaleUseCase', () => {
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
         channelReference: 'web-order',
-        items: [{ variantId: 'v1', quantity: 1, unitPriceCents: 1000 }],
+        items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
       };
 
       const result = await useCase.execute(command, createUow());
@@ -391,7 +451,7 @@ describe('CreateSaleUseCase', () => {
       const command: CreateSaleCommand = {
         customerId: 'non-existent-customer',
         channelReference: 'web-order',
-        items: [{ variantId: 'v1', quantity: 1, unitPriceCents: 1000 }],
+        items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
       };
 
       const result = await useCase.execute(command, createUow());
@@ -412,7 +472,7 @@ describe('CreateSaleUseCase', () => {
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
         channelReference: '',
-        items: [{ variantId: 'v1', quantity: 1, unitPriceCents: 1000 }],
+        items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
       };
 
       const result = await useCase.execute(command, createUow());
@@ -426,7 +486,7 @@ describe('CreateSaleUseCase', () => {
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
         channelReference: '   ',
-        items: [{ variantId: 'v1', quantity: 1, unitPriceCents: 1000 }],
+        items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
       };
 
       const result = await useCase.execute(command, createUow());
@@ -446,7 +506,7 @@ describe('CreateSaleUseCase', () => {
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
         channelReference: 'pos-terminal-001',
-        items: [{ variantId: 'v1', quantity: 3, unitPriceCents: 1500 }],
+        items: [{ variantId: 'v1', quantity: 3, priceType: 'regular' }],
       };
 
       const result = await useCase.execute(command, createUow());
@@ -456,7 +516,7 @@ describe('CreateSaleUseCase', () => {
 
       expect(cashRepo.entries).toHaveLength(1);
       expect(cashRepo.entries[0]!.type).toBe('SALE_INCOME');
-      expect(cashRepo.entries[0]!.amount.cents).toBe(4500); // 3*1500
+      expect(cashRepo.entries[0]!.amount.cents).toBe(6000); // 3*2000
       expect(cashRepo.entries[0]!.amount.isPositive()).toBe(true);
       expect(cashRepo.entries[0]!.tag).toBeNull();
     });
@@ -472,7 +532,7 @@ describe('CreateSaleUseCase', () => {
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
         channelReference: 'web-order',
-        items: [{ variantId: 'v1', quantity: 4, unitPriceCents: 2500 }],
+        items: [{ variantId: 'v1', quantity: 4, priceType: 'regular' }],
       };
 
       const result = await useCase.execute(command, createUow());
@@ -480,12 +540,12 @@ describe('CreateSaleUseCase', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      // Revenue: 4 * 2500 = 10000
+      // Revenue: 4 * 2000 = 8000
       // Cost: 4 * 750 = 3000
-      // Profit: 10000 - 3000 = 7000
-      expect(result.value.totalRevenueCents).toBe(10000);
-      expect(result.value.totalCostCents).toBe(3000);
-      expect(result.value.grossProfitCents).toBe(7000);
+      // Profit: 8000 - 3000 = 5000
+      expect(result.value.totalRevenue).toBe(80);
+      expect(result.value.totalCost).toBe(30);
+      expect(result.value.grossProfit).toBe(50);
     });
   });
 
@@ -500,8 +560,8 @@ describe('CreateSaleUseCase', () => {
         customerId: 'customer-1',
         channelReference: 'web-order',
         items: [
-          { variantId: 'v1', quantity: 2, unitPriceCents: 1000 },
-          { variantId: 'v2', quantity: 5, unitPriceCents: 2000 }, // no lots for v2
+          { variantId: 'v1', quantity: 2, priceType: 'regular' },
+          { variantId: 'v2', quantity: 5, priceType: 'regular' }, // no lots for v2
         ],
       };
 
@@ -521,6 +581,176 @@ describe('CreateSaleUseCase', () => {
     });
   });
 
+  // ── Presale price resolution ──────────────────────────────
+
+  describe('presale price resolution', () => {
+    it('resolves unit price from product presalePrice when priceType is "presale"', async () => {
+      // Product with salePrice=2000 ($20.00) and presalePrice=1500 ($15.00)
+      const presaleProduct = createTestProduct('prod-presale', 2000, 1500);
+      const presaleVariant = createTestVariant('v-presale', 'prod-presale');
+
+      productRepo.setProduct(presaleProduct);
+      variantRepo.setVariant(presaleVariant);
+
+      lotRepo.lots.set('lot-presale', createTestLot('lot-presale', 'v-presale', 10, 500, new Date('2026-01-01')));
+
+      const command: CreateSaleCommand = {
+        customerId: 'customer-1',
+        channelReference: 'presale-order',
+        items: [{ variantId: 'v-presale', quantity: 2, priceType: 'presale' }],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // Revenue should be 2 * presale(1500) = 3000 ($30.00)
+      expect(result.value.totalRevenue).toBe(30);
+
+      // Verify the sale line stores the correct priceType and unitPriceCents
+      const sale = Array.from(saleRepo.sales.values())[0]!;
+      const line = sale.lines[0]!;
+      expect(line.priceType).toBe('presale');
+      expect(line.unitPrice.cents).toBe(1500);
+
+      // Cost: 2 * 500 = 1000 ($10.00)
+      expect(result.value.totalCost).toBe(10);
+      // Profit: 3000 - 1000 = 2000 ($20.00)
+      expect(result.value.grossProfit).toBe(20);
+    });
+
+    it('falls back to salePrice when presale priceType is used but product has no presalePrice', async () => {
+      // Product with salePrice=2000, no presalePrice
+      const noPresaleProduct = createTestProduct('prod-no-presale', 2000, null);
+      const noPresaleVariant = createTestVariant('v-no-presale', 'prod-no-presale');
+
+      productRepo.setProduct(noPresaleProduct);
+      variantRepo.setVariant(noPresaleVariant);
+
+      lotRepo.lots.set('lot-nopre', createTestLot('lot-nopre', 'v-no-presale', 10, 500, new Date('2026-01-01')));
+
+      const command: CreateSaleCommand = {
+        customerId: 'customer-1',
+        channelReference: 'fallback-order',
+        items: [{ variantId: 'v-no-presale', quantity: 3, priceType: 'presale' }],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // Falls back to salePrice (2000) because no presalePrice
+      expect(result.value.totalRevenue).toBe(60); // 3 * 2000 = 6000
+
+      const sale = Array.from(saleRepo.sales.values())[0]!;
+      const line = sale.lines[0]!;
+      // Still records priceType as 'presale' even though fallback price was used
+      expect(line.priceType).toBe('presale');
+      expect(line.unitPrice.cents).toBe(2000);
+    });
+  });
+
+  // ── Sale snapshot immutability ──────────────────────────────
+
+  describe('sale snapshot immutability', () => {
+    it('preserves original price snapshot when product price later changes', async () => {
+      // Create product with salePrice=2000 ($20.00)
+      const snapProduct = createTestProduct('prod-snap', 2000, null);
+      const snapVariant = createTestVariant('v-snap', 'prod-snap');
+
+      productRepo.setProduct(snapProduct);
+      variantRepo.setVariant(snapVariant);
+
+      lotRepo.lots.set('lot-snap', createTestLot('lot-snap', 'v-snap', 10, 500, new Date('2026-01-01')));
+
+      // Step 1: Create the sale at original price ($20.00)
+      const command: CreateSaleCommand = {
+        customerId: 'customer-1',
+        channelReference: 'snapshot-order',
+        items: [{ variantId: 'v-snap', quantity: 2, priceType: 'regular' }],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // Verify original sale snapshot = $20.00 * 2 = $40.00
+      expect(result.value.totalRevenue).toBe(40);
+
+      // Step 2: Change the product price to $50.00 (5000 cents)
+      snapProduct.changeSalePrice(Money.fromCents(5000));
+      productRepo.setProduct(snapProduct); // update in fake repo
+
+      // Step 3: Verify the stored sale still has the ORIGINAL price ($20.00)
+      const storedSale = Array.from(saleRepo.sales.values())[0]!;
+      const storedLine = storedSale.lines[0]!;
+      expect(storedLine.unitPrice.cents).toBe(2000); // still $20.00
+      expect(storedLine.priceType).toBe('regular');
+
+      // Step 4: Create a NEW sale with the NEW price ($50.00)
+      lotRepo.lots.set('lot-snap2', createTestLot('lot-snap2', 'v-snap', 10, 600, new Date('2026-02-01')));
+      // Note: we restored variant lots by adding new lot, the old lot was consumed
+
+      const command2: CreateSaleCommand = {
+        customerId: 'customer-1',
+        channelReference: 'new-price-order',
+        items: [{ variantId: 'v-snap', quantity: 1, priceType: 'regular' }],
+      };
+
+      const result2 = await useCase.execute(command2, createUow());
+
+      expect(result2.ok).toBe(true);
+      if (!result2.ok) return;
+
+      // New sale uses new price ($50.00)
+      expect(result2.value.totalRevenue).toBe(50);
+
+      // Original sale STILL has old price ($20.00) — snapshot is immutable
+      const allSales = Array.from(saleRepo.sales.values());
+      const origSale = allSales[0]!;
+      const newSale = allSales[1]!;
+      expect(origSale.lines[0]!.unitPrice.cents).toBe(2000);
+      expect(newSale.lines[0]!.unitPrice.cents).toBe(5000);
+    });
+
+    it('preserves presale snapshot when presale price later changes', async () => {
+      // Product with presale price $15.00 (1500 cents)
+      const presaleSnapProduct = createTestProduct('prod-presale-snap', 2000, 1500);
+      const presaleSnapVariant = createTestVariant('v-presale-snap', 'prod-presale-snap');
+
+      productRepo.setProduct(presaleSnapProduct);
+      variantRepo.setVariant(presaleSnapVariant);
+
+      lotRepo.lots.set('lot-ps', createTestLot('lot-ps', 'v-presale-snap', 10, 500, new Date('2026-01-01')));
+
+      // Step 1: Create presale at $15.00
+      const command: CreateSaleCommand = {
+        customerId: 'customer-1',
+        channelReference: 'presale-snap-order',
+        items: [{ variantId: 'v-presale-snap', quantity: 3, priceType: 'presale' }],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.totalRevenue).toBe(45); // 3 * 1500 = 4500
+
+      // Step 2: Change presale price to $10.00
+      presaleSnapProduct.changePresalePrice(Money.fromCents(1000));
+      productRepo.setProduct(presaleSnapProduct);
+
+      // Step 3: Verify stored presale snapshot remains $15.00
+      const storedSale = Array.from(saleRepo.sales.values())[0]!;
+      const storedLine = storedSale.lines[0]!;
+      expect(storedLine.priceType).toBe('presale');
+      expect(storedLine.unitPrice.cents).toBe(1500); // unchanged
+    });
+  });
+
   // ── Variant not found ──────────────────────────────────────
 
   describe('variant lookup', () => {
@@ -530,7 +760,7 @@ describe('CreateSaleUseCase', () => {
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
         channelReference: 'web-order',
-        items: [{ variantId: 'non-existent-variant', quantity: 1, unitPriceCents: 1000 }],
+        items: [{ variantId: 'non-existent-variant', quantity: 1, priceType: 'regular' }],
       };
 
       const result = await useCase.execute(command, createUow());

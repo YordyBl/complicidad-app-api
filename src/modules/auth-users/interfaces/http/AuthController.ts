@@ -17,7 +17,7 @@ import type { RegisterRequestDto, RegisterResponseDto, RegisterErrorDto } from '
 export class AuthController {
   constructor(
     private readonly loginUseCase: LoginUseCase,
-    private readonly registerUseCase?: RegisterUserUseCase,
+    private readonly registerUseCase: RegisterUserUseCase,
   ) {}
 
   /**
@@ -88,15 +88,6 @@ export class AuthController {
    * 201 on success, 400 on validation errors, or 409 on duplicate email.
    */
   async register(req: Request, res: Response): Promise<void> {
-    if (!this.registerUseCase) {
-      const body: RegisterErrorDto = {
-        error: 'ServiceUnavailable',
-        message: 'Registration is not available',
-      };
-      res.status(503).json(body);
-      return;
-    }
-
     // ── Basic HTTP shape validation ─────────────────────────
     const { email, password, role } = req.body as RegisterRequestDto;
 

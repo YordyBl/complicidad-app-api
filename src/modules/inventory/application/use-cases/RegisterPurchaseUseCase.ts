@@ -41,7 +41,8 @@ export interface PurchaseScope extends UnitOfWorkScope {
 export interface RegisterPurchaseCommand {
   variantId: string;
   quantity: number;
-  unitCostCents: number;
+  /** Unit cost in soles (e.g. 50.25). Converted to cents internally. */
+  unitCost: number;
   supplierId?: string;
   notes?: string;
   purchaseDate?: string; // ISO date string
@@ -50,7 +51,7 @@ export interface RegisterPurchaseCommand {
 export interface RegisterPurchaseResponse {
   purchaseId: string;
   lotId: string;
-  totalCostCents: number;
+  totalCost: number; // in soles
 }
 
 // ── Error ────────────────────────────────────────────────────
@@ -82,9 +83,12 @@ export class RegisterPurchaseUseCase {
     if (command.quantity <= 0) {
       return err(new InvalidQuantityError('Quantity must be positive'));
     }
-    if (command.unitCostCents < 0) {
+    if (command.unitCost < 0) {
       return err(new InvalidQuantityError('Unit cost cannot be negative'));
     }
+
+    // Convert soles to cents (internal representation)
+    const unitCostCents = Math.round(command.unitCost * 100);
 
     // ── Execute in transaction ────────────────────────────
     return uow.run(async (baseScope) => {
@@ -120,7 +124,7 @@ export class RegisterPurchaseUseCase {
         purchaseId,
         command.quantity,
         command.quantity,
-        Money.fromCents(command.unitCostCents),
+        Money.fromCents(unitCostCents),
         purchaseDate,
         command.supplierId ? SupplierId.from(command.supplierId) : null,
       );
@@ -130,7 +134,7 @@ export class RegisterPurchaseUseCase {
       await scope.inventoryLots.save(lot);
 
       // 5. Create cash ledger entry (negative outflow representing reinvestment)
-      const totalCost = Money.fromCents(command.unitCostCents).multiply(command.quantity);
+      const totalCost = Money.fromCents(unitCostCents).multiply(command.quantity);
       const cashEntry = new CashLedgerEntry(
         CashLedgerEntryId.generate(),
         'PURCHASE_OUTFLOW',
@@ -144,7 +148,7 @@ export class RegisterPurchaseUseCase {
       return ok({
         purchaseId: purchaseId.toString(),
         lotId: lotId.toString(),
-        totalCostCents: totalCost.cents,
+        totalCost: totalCost.cents / 100,
       });
     });
   }

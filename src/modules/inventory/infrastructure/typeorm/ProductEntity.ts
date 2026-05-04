@@ -12,8 +12,14 @@ export class ProductEntity extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   description!: string | null;
 
-  @Column({ name: 'base_price_cents', type: 'int' })
-  basePriceCents!: number;
+  @Column({ name: 'base_sku', type: 'varchar', length: 100 })
+  baseSku!: string;
+
+  @Column({ name: 'sale_price_cents', type: 'int' })
+  salePriceCents!: number;
+
+  @Column({ name: 'presale_price_cents', type: 'int', nullable: true })
+  presalePriceCents!: number | null;
 
   @Column({ type: 'simple-array', nullable: true })
   aliases!: string[] | null;

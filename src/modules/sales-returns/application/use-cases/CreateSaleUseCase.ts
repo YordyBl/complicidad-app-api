@@ -2,17 +2,19 @@
  * Create Sale use case — records a multi-item sale with FIFO lot
  * consumption and a corresponding positive cash income entry.
  *
- * This runs inside a UnitOfWork transaction to ensure atomicity
- * across inventory lots, sale records, and cash ledger entries.
- *
- * CRITICAL DESIGN: ALL validations (customer, variant, stock) happen
- * BEFORE any mutations. Lot consumption only occurs after every item
- * passes the FIFO allocation check, ensuring atomicity — if a single
- * item fails, no lots have been mutated.
+ * CRITICAL DESIGN:
+ * - Backend resolves the AUTHORITATIVE unit price from the Product
+ *   based on each item's priceType (regular|presale). The client
+ *   does NOT submit unit prices — the backend is the source of truth.
+ * - ALL validations (customer, variant, stock, product) happen BEFORE
+ *   any mutations. No lot is consumed until every item passes checks.
+ * - FIFO lot costing remains unchanged; reports/caja/profit use
+ *   FIFO costs and sale snapshots.
  *
  * Dependencies:
  * - CustomerRepository: validates customer exists
  * - VariantRepository: validates each variant exists
+ * - ProductRepository: resolves authoritative unit prices
  * - UnitOfWork scope provides: SaleRepository, InventoryLotRepository,
  *   CashLedgerRepository
  */
@@ -27,11 +29,12 @@ import type { InventoryLotRepository } from '../../../inventory/domain/Inventory
 import type { CashLedgerRepository } from '../../../accounting-reports/domain/CashLedgerRepository.js';
 import type { CustomerRepository } from '../../../customers/domain/CustomerRepository.js';
 import type { VariantRepository } from '../../../inventory/domain/VariantRepository.js';
+import type { ProductRepository } from '../../../inventory/domain/ProductRepository.js';
 import { CustomerId } from '../../../customers/domain/CustomerId.js';
 import { VariantId } from '../../../inventory/domain/VariantId.js';
 import { Sale } from '../../domain/Sale.js';
 import { SaleId } from '../../domain/SaleId.js';
-import { SaleLine } from '../../domain/SaleLine.js';
+import { SaleLine, type PriceType } from '../../domain/SaleLine.js';
 import { SaleLineId } from '../../domain/SaleLineId.js';
 import { LotConsumptionRecord } from '../../domain/LotConsumptionRecord.js';
 import { allocateFifo } from '../../../inventory/domain/services/FifoAllocationService.js';
@@ -56,7 +59,8 @@ export interface SaleScope extends UnitOfWorkScope {
 export interface SaleItemCommand {
   variantId: string;
   quantity: number;
-  unitPriceCents: number;
+  /** Tells the backend which product price to use. The client never submits unitPriceCents. */
+  priceType: PriceType;
 }
 
 export interface CreateSaleCommand {
@@ -67,9 +71,12 @@ export interface CreateSaleCommand {
 
 export interface CreateSaleResponse {
   saleId: string;
-  totalRevenueCents: number;
-  totalCostCents: number;
-  grossProfitCents: number;
+  /** Total revenue in soles. */
+  totalRevenue: number;
+  /** Total cost in soles. */
+  totalCost: number;
+  /** Gross profit in soles. */
+  grossProfit: number;
 }
 
 // ── Errors ───────────────────────────────────────────────────
@@ -94,15 +101,27 @@ export class InvalidQuantityError extends BusinessRuleError {
   override readonly name = 'InvalidQuantityError' as const;
 }
 
+export class InvalidPriceTypeError extends BusinessRuleError {
+  override readonly name = 'InvalidPriceTypeError' as const;
+
+  constructor(got: string) {
+    super(`Invalid priceType: "${got}". Must be "regular" or "presale".`);
+  }
+}
+
+const VALID_PRICE_TYPES: ReadonlySet<string> = new Set(['regular', 'presale']);
+
 // ── Internal planning type ───────────────────────────────────
 
 /**
  * Planning data collected during the validation phase.
- * Stores the allocation result and the lots to be consumed,
- * so mutations happen only after all items pass validation.
+ * Stores the resolved unit price, allocation result, and the lots
+ * to be consumed, so mutations happen only after all items pass.
  */
 interface ItemPlan {
   variantId: VariantId;
+  unitPrice: Money;
+  priceType: PriceType;
   allocation: FifoAllocationResult;
   lots: PurchaseLot[];
 }
@@ -113,6 +132,7 @@ export class CreateSaleUseCase {
   constructor(
     private readonly customerRepository: CustomerRepository,
     private readonly variantRepository: VariantRepository,
+    private readonly productRepository: ProductRepository,
   ) {}
 
   /**
@@ -140,8 +160,8 @@ export class CreateSaleUseCase {
       if (item.quantity <= 0) {
         return err(new InvalidQuantityError('Item quantity must be positive'));
       }
-      if (item.unitPriceCents < 0) {
-        return err(new InvalidQuantityError('Item unit price cannot be negative'));
+      if (!VALID_PRICE_TYPES.has(item.priceType)) {
+        return err(new InvalidPriceTypeError(item.priceType));
       }
     }
 
@@ -169,16 +189,25 @@ export class CreateSaleUseCase {
           return err(new NotFoundError('Variant', item.variantId));
         }
 
-        // b) Get open lots with row-level lock
+        // b) Look up product to get authoritative price
+        const product = await this.productRepository.findById(variant.productId);
+        if (!product) {
+          return err(new NotFoundError('Product', variant.productId.toString()));
+        }
+
+        // c) Resolve authoritative unit price from Product (backend is source of truth)
+        const unitPrice = product.resolveUnitPrice(item.priceType);
+
+        // d) Get open lots with row-level lock
         const lots = await scope.inventoryLots.findByVariantIdOrderedByDate(variantId, true);
 
-        // c) Allocate FIFO — pure function, no mutation
+        // e) Allocate FIFO — pure function, no mutation
         const allocation = allocateFifo(lots, item.quantity);
         if (!allocation.ok) {
           return err(allocation.error);
         }
 
-        plans.push({ variantId, allocation: allocation.value, lots });
+        plans.push({ variantId, unitPrice, priceType: item.priceType, allocation: allocation.value, lots });
       }
 
       // ── PHASE B: All validations passed — execute mutations ──
@@ -214,12 +243,13 @@ export class CreateSaleUseCase {
           modifiedLotSet.add(selection.lotId);
         }
 
-        // Create the sale line
+        // Create the sale line with resolved price and priceType snapshot
         const line = new SaleLine(
           SaleLineId.generate(),
           commandItem.variantId,
           commandItem.quantity,
-          Money.fromCents(commandItem.unitPriceCents),
+          plan.unitPrice,
+          commandItem.priceType,
           consumptions,
         );
         lines.push(line);
@@ -266,9 +296,9 @@ export class CreateSaleUseCase {
 
       return ok({
         saleId: sale.id.toString(),
-        totalRevenueCents: sale.totalRevenue.cents,
-        totalCostCents: sale.totalCost.cents,
-        grossProfitCents: sale.grossProfit.cents,
+        totalRevenue: sale.totalRevenue.cents / 100,
+        totalCost: sale.totalCost.cents / 100,
+        grossProfit: sale.grossProfit.cents / 100,
       });
     });
   }

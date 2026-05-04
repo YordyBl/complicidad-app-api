@@ -2,7 +2,9 @@
  * Domain entity — a single line within a Sale.
  *
  * Each SaleLine represents one variant being sold in a specific quantity
- * at a specific unit price. The lot consumptions track exactly which
+ * at a specific unit price (snapshot resolved by the backend from the
+ * Product's current price). The priceType records whether it was a
+ * regular or presale price. Lot consumptions track exactly which
  * purchase lots were consumed to fulfil this line.
  */
 import { BusinessRuleError } from '../../../shared/domain/errors.js';
@@ -10,12 +12,15 @@ import { Money } from '../../../shared/domain/Money.js';
 import type { SaleLineId } from './SaleLineId.js';
 import type { LotConsumptionRecord } from './LotConsumptionRecord.js';
 
+export type PriceType = 'regular' | 'presale';
+
 export class SaleLine {
   constructor(
     private readonly _id: SaleLineId,
     private readonly _variantId: string,
     private readonly _quantity: number,
     private readonly _unitPrice: Money,
+    private readonly _priceType: PriceType,
     private readonly _consumptions: LotConsumptionRecord[],
   ) {
     if (_quantity <= 0) {
@@ -40,8 +45,14 @@ export class SaleLine {
     return this._quantity;
   }
 
+  /** Snapshot of the unit price at sale time (calculated by backend from Product). */
   get unitPrice(): Money {
     return this._unitPrice;
+  }
+
+  /** Whether this line used regular or presale pricing. */
+  get priceType(): PriceType {
+    return this._priceType;
   }
 
   get consumptions(): readonly LotConsumptionRecord[] {

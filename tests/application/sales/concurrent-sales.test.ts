@@ -21,6 +21,8 @@ import type { CreateSaleCommand } from '../../../src/modules/sales-returns/appli
 import type { UnitOfWork, UnitOfWorkScope } from '../../../src/shared/application/UnitOfWork.js';
 import type { CustomerRepository } from '../../../src/modules/customers/domain/CustomerRepository.js';
 import type { VariantRepository } from '../../../src/modules/inventory/domain/VariantRepository.js';
+import type { ProductRepository } from '../../../src/modules/inventory/domain/ProductRepository.js';
+import { Product } from '../../../src/modules/inventory/domain/Product.js';
 import type { InventoryLotRepository } from '../../../src/modules/inventory/domain/InventoryLotRepository.js';
 import type { SaleRepository } from '../../../src/modules/sales-returns/domain/SaleRepository.js';
 import type { CashLedgerRepository } from '../../../src/modules/accounting-reports/domain/CashLedgerRepository.js';
@@ -77,6 +79,16 @@ class FakeVariantRepository implements VariantRepository {
   async delete(id: VariantId): Promise<void> { this.variants.delete(id.toString()); }
 }
 
+class FakeProductRepository implements ProductRepository {
+  private products = new Map<string, Product>();
+  setProduct(p: Product): void { this.products.set(p.id.toString(), p); }
+  async findById(id: ProductId): Promise<Product | null> { return this.products.get(id.toString()) ?? null; }
+  async findByAlias(_alias: string): Promise<Product[]> { return []; }
+  async save(p: Product): Promise<void> { this.products.set(p.id.toString(), p); }
+  async delete(id: ProductId): Promise<void> { this.products.delete(id.toString()); }
+  async findAllActive(): Promise<Product[]> { return Array.from(this.products.values()); }
+}
+
 class FakeInventoryLotRepository implements InventoryLotRepository {
   lots = new Map<string, PurchaseLot>();
 
@@ -103,6 +115,10 @@ class FakeSaleRepository implements SaleRepository {
   async findByCustomerId(cId: string): Promise<SaleEntity[]> {
     return Array.from(this.sales.values()).filter((s) => s.customerId === cId)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+  async findAll(): Promise<SaleEntity[]> {
+    return Array.from(this.sales.values())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 }
 
@@ -146,15 +162,14 @@ function createTestCustomer(id?: string): Customer {
   );
 }
 
-function createTestVariant(id?: string): VariantEntity {
+function createTestVariant(id?: string, productId?: string): VariantEntity {
   const skuResult = SkuEntity.from('TEST-' + (id ?? 'V1'));
   if (!skuResult.ok) throw new Error('Invalid SKU');
   return new VariantEntity(
     VariantIdEntity.from(id ?? 'v1'),
-    ProductIdEntity.generate(),
+    productId ? ProductIdEntity.from(productId) : ProductIdEntity.generate(),
     skuResult.value,
     {},
-    Money.fromCents(1000),
     true,
     new Date('2026-01-01'),
     new Date('2026-01-01'),
@@ -177,16 +192,36 @@ function createTestLot(id: string, vId: string, qty: number, costCents: number, 
 describe('Concurrent final-unit sales', () => {
   let customerRepo: FakeCustomerRepository;
   let variantRepo: FakeVariantRepository;
+  let productRepo: FakeProductRepository;
   let lotRepo: FakeInventoryLotRepository;
   let saleRepo: FakeSaleRepository;
   let cashRepo: FakeCashLedgerRepository;
   let useCase: CreateSaleUseCase;
   let customer: Customer;
   let variant: VariantEntity;
+  let productId: ProductIdEntity;
 
   beforeEach(() => {
     customer = createTestCustomer();
-    variant = createTestVariant();
+
+    // Create a product with salePrice 1000 cents (used as authoritative unit price)
+    productId = ProductIdEntity.generate();
+    const product = new Product(
+      productId,
+      'Test Product',
+      null,
+      'test-product',
+      Money.fromCents(1000), // salePrice
+      null,                  // presalePrice
+      [],                    // aliases
+      true,
+      new Date('2026-01-01'),
+      new Date('2026-01-01'),
+    );
+    productRepo = new FakeProductRepository();
+    productRepo.setProduct(product);
+
+    variant = createTestVariant(undefined, productId.toString());
 
     customerRepo = new FakeCustomerRepository();
     customerRepo.setCustomer(customer);
@@ -198,7 +233,7 @@ describe('Concurrent final-unit sales', () => {
     saleRepo = new FakeSaleRepository();
     cashRepo = new FakeCashLedgerRepository();
 
-    useCase = new CreateSaleUseCase(customerRepo, variantRepo);
+    useCase = new CreateSaleUseCase(customerRepo, variantRepo, productRepo);
   });
 
   function createUoW(): SequentialFakeUnitOfWork {
@@ -217,13 +252,13 @@ describe('Concurrent final-unit sales', () => {
     const command: CreateSaleCommand = {
       customerId: 'customer-1',
       channelReference: 'order-1',
-      items: [{ variantId: 'v1', quantity: 1, unitPriceCents: 1000 }],
+      items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
     };
 
     const command2: CreateSaleCommand = {
       customerId: 'customer-1',
       channelReference: 'order-2',
-      items: [{ variantId: 'v1', quantity: 1, unitPriceCents: 1000 }],
+      items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
     };
 
     // Execute sequentially (simulating what FOR UPDATE + serialization does)
@@ -257,13 +292,13 @@ describe('Concurrent final-unit sales', () => {
     const command: CreateSaleCommand = {
       customerId: 'customer-1',
       channelReference: 'order-1',
-      items: [{ variantId: 'v1', quantity: 3, unitPriceCents: 1000 }],
+      items: [{ variantId: 'v1', quantity: 3, priceType: 'regular' }],
     };
 
     const command2: CreateSaleCommand = {
       customerId: 'customer-1',
       channelReference: 'order-2',
-      items: [{ variantId: 'v1', quantity: 5, unitPriceCents: 1000 }],
+      items: [{ variantId: 'v1', quantity: 5, priceType: 'regular' }],
     };
 
     const result1 = await useCase.execute(command, createUoW());
@@ -291,13 +326,13 @@ describe('Concurrent final-unit sales', () => {
     const command: CreateSaleCommand = {
       customerId: 'customer-1',
       channelReference: 'order-1',
-      items: [{ variantId: 'v1', quantity: 3, unitPriceCents: 1000 }],
+      items: [{ variantId: 'v1', quantity: 3, priceType: 'regular' }],
     };
 
     const command2: CreateSaleCommand = {
       customerId: 'customer-1',
       channelReference: 'order-2',
-      items: [{ variantId: 'v1', quantity: 3, unitPriceCents: 1000 }],
+      items: [{ variantId: 'v1', quantity: 3, priceType: 'regular' }],
     };
 
     // First succeeds (3 <= 4)
@@ -322,13 +357,13 @@ describe('Concurrent final-unit sales', () => {
     const bigSale: CreateSaleCommand = {
       customerId: 'customer-1',
       channelReference: 'big-order',
-      items: [{ variantId: 'v1', quantity: 4, unitPriceCents: 1000 }],
+      items: [{ variantId: 'v1', quantity: 4, priceType: 'regular' }],
     };
 
     const smallSale: CreateSaleCommand = {
       customerId: 'customer-1',
       channelReference: 'small-order',
-      items: [{ variantId: 'v1', quantity: 1, unitPriceCents: 1000 }],
+      items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
     };
 
     // Big sale consumes 4

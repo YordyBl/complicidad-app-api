@@ -47,6 +47,7 @@ function makeLine(
     variantId,
     qty,
     Money.fromCents(unitPriceCents),
+    'regular',
     consumptions,
   );
 }
@@ -225,19 +226,19 @@ describe('Sale domain — FIFO consumption calculations', () => {
   describe('sale line invariants', () => {
     it('rejects line with zero quantity', () => {
       expect(
-        () => new SaleLine(SaleLineId.from('l1'), 'v1', 0, Money.fromCents(1000), []),
+        () => new SaleLine(SaleLineId.from('l1'), 'v1', 0, Money.fromCents(1000), 'regular', []),
       ).toThrow('Quantity must be positive');
     });
 
     it('rejects line with negative quantity', () => {
       expect(
-        () => new SaleLine(SaleLineId.from('l1'), 'v1', -1, Money.fromCents(1000), []),
+        () => new SaleLine(SaleLineId.from('l1'), 'v1', -1, Money.fromCents(1000), 'regular', []),
       ).toThrow('Quantity must be positive');
     });
 
     it('rejects line with negative unit price', () => {
       expect(
-        () => new SaleLine(SaleLineId.from('l1'), 'v1', 1, Money.fromCents(-500), []),
+        () => new SaleLine(SaleLineId.from('l1'), 'v1', 1, Money.fromCents(-500), 'regular', []),
       ).toThrow('Unit price cannot be negative');
     });
   });

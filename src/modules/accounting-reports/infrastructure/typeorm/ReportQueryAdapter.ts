@@ -82,7 +82,7 @@ export class ReportQueryAdapter implements ReportReadRepository {
         'p.id AS product_id',
         'p.name AS product_name',
         'v.id AS variant_id',
-        'v.name AS variant_name',
+        'v.sku AS variant_name',
         'v.sku AS sku',
         'COALESCE(SUM(l.remaining_quantity), 0) AS total_remaining_qty',
         'COALESCE(SUM(l.remaining_quantity * l.unit_cost_cents), 0) AS investment_cents',
@@ -94,10 +94,9 @@ export class ReportQueryAdapter implements ReportReadRepository {
       .groupBy('p.id')
       .addGroupBy('p.name')
       .addGroupBy('v.id')
-      .addGroupBy('v.name')
       .addGroupBy('v.sku')
       .orderBy('p.name', 'ASC')
-      .addOrderBy('v.name', 'ASC')
+      .addOrderBy('v.sku', 'ASC')
       .getRawMany();
 
     return rows.map((r: Record<string, unknown>) => ({
@@ -117,12 +116,16 @@ export class ReportQueryAdapter implements ReportReadRepository {
       .select([
         'l.id AS lot_id',
         'l.variant_id AS variant_id',
+        'v.sku AS sku',
+        'p.name AS product_name',
         'l.purchase_date AS purchase_date',
         'l.purchased_quantity AS purchased_quantity',
         'l.remaining_quantity AS remaining_quantity',
         'l.unit_cost_cents AS unit_cost_cents',
       ])
       .from('inventory_lots', 'l')
+      .innerJoin('variants', 'v', 'v.id = l.variant_id')
+      .innerJoin('products', 'p', 'p.id = v.product_id')
       .orderBy('l.purchase_date', 'ASC')
       .addOrderBy('l.created_at', 'ASC')
       .getRawMany();
@@ -133,6 +136,8 @@ export class ReportQueryAdapter implements ReportReadRepository {
       return {
         lotId: r.lot_id as string,
         variantId: r.variant_id as string,
+        sku: r.sku as string,
+        productName: r.product_name as string,
         purchaseDate: r.purchase_date as Date,
         purchasedQuantity: Number(r.purchased_quantity),
         remainingQuantity: remainingQty,

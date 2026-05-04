@@ -1,8 +1,9 @@
 /**
  * Sku value object — represents a unique stock-keeping unit identifier.
  *
- * SKUs must be non-empty, trimmed, and uppercase-normalized.
- * Uniqueness is enforced at the persistence boundary (unique constraint).
+ * SKUs must be non-empty, trimmed, and lowercase-normalized.
+ * Uniqueness is enforced after normalization at the persistence boundary
+ * (database unique constraint).
  */
 import { err, ok } from '../../../shared/domain/Result.js';
 import type { Result } from '../../../shared/domain/Result.js';
@@ -25,6 +26,7 @@ export class Sku {
   /**
    * Create a Sku from a raw string value.
    * Validates: non-empty, trimmed, within max length.
+   * Normalizes to lowercase for uniqueness.
    */
   static from(value: string): Result<Sku, SkuError> {
     const trimmed = value.trim();
@@ -34,12 +36,12 @@ export class Sku {
     if (trimmed.length > SKU_MAX_LENGTH) {
       return err(new SkuError(`SKU cannot exceed ${String(SKU_MAX_LENGTH)} characters`));
     }
-    return ok(new Sku(trimmed.toUpperCase()));
+    return ok(new Sku(trimmed.toLowerCase()));
   }
 
   /** Create from a raw string without validation (for persistence mapping). */
   static fromUnsafe(value: string): Sku {
-    return new Sku(value.trim().toUpperCase());
+    return new Sku(value.trim().toLowerCase());
   }
 
   get value(): string {

@@ -25,21 +25,21 @@ describe('Sku', () => {
       const result = Sku.from('COLA-500ML');
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.value.value).toBe('COLA-500ML');
+      expect(result.value.value).toBe('cola-500ml');
     });
 
-    it('normalizes to uppercase', () => {
-      const result = Sku.from('cola-500ml');
+    it('normalizes to lowercase', () => {
+      const result = Sku.from('COLA-500ML');
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.value.value).toBe('COLA-500ML');
+      expect(result.value.value).toBe('cola-500ml');
     });
 
     it('trims whitespace', () => {
       const result = Sku.from('  SKU-001  ');
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.value.value).toBe('SKU-001');
+      expect(result.value.value).toBe('sku-001');
     });
 
     it('rejects empty strings', () => {
@@ -130,7 +130,9 @@ describe('Product', () => {
       ProductId.generate(),
       'Test Product',
       'A test product',
+      'test-product',
       Money.fromCents(1000), // $10.00
+      null, // no presale price
       [],
       true,
       now,
@@ -142,7 +144,8 @@ describe('Product', () => {
     const p = createProduct();
     expect(p.name).toBe('Test Product');
     expect(p.description).toBe('A test product');
-    expect(p.basePrice.cents).toBe(1000);
+    expect(p.baseSku).toBe('test-product');
+    expect(p.salePrice.cents).toBe(1000);
     expect(p.isActive).toBe(true);
     expect(p.aliases).toHaveLength(0);
   });
@@ -174,10 +177,25 @@ describe('Product', () => {
     expect(p.aliases).toHaveLength(0);
   });
 
-  it('can change base price', () => {
+  it('can change sale price', () => {
     const p = createProduct();
-    p.changeBasePrice(Money.fromCents(2000));
-    expect(p.basePrice.cents).toBe(2000);
+    p.changeSalePrice(Money.fromCents(2000));
+    expect(p.salePrice.cents).toBe(2000);
+  });
+
+  it('can set and clear presale price', () => {
+    const p = createProduct();
+    p.changePresalePrice(Money.fromCents(800));
+    expect(p.presalePrice?.cents).toBe(800);
+    p.changePresalePrice(null);
+    expect(p.presalePrice).toBeNull();
+  });
+
+  it('resolves unit price from presale when available', () => {
+    const p = createProduct();
+    p.changePresalePrice(Money.fromCents(700));
+    expect(p.resolveUnitPrice('presale').cents).toBe(700);
+    expect(p.resolveUnitPrice('regular').cents).toBe(1000);
   });
 });
 
@@ -195,7 +213,6 @@ describe('Variant', () => {
       productId,
       sku.value,
       { color: 'red', size: 'M' },
-      Money.fromCents(1500),
       true,
       now,
       now,
@@ -205,10 +222,16 @@ describe('Variant', () => {
   it('creates with given values', () => {
     const v = createVariant();
     expect(v.productId.equals(productId)).toBe(true);
-    expect(v.sku.value).toBe('TEST-SKU');
+    expect(v.sku.value).toBe('test-sku');
     expect(v.attributes.color).toBe('red');
     expect(v.attributes.size).toBe('M');
-    expect(v.price.cents).toBe(1500);
+  });
+
+  it('has no price property', () => {
+    const v = createVariant();
+    // Variant should NOT have price or changePrice — pricing is owned by Product
+    expect('price' in v).toBe(false);
+    expect('changePrice' in v).toBe(false);
   });
 
   it('can change SKU', () => {
@@ -217,13 +240,7 @@ describe('Variant', () => {
     expect(newSku.ok).toBe(true);
     if (!newSku.ok) return;
     v.changeSku(newSku.value);
-    expect(v.sku.value).toBe('NEW-SKU');
-  });
-
-  it('can change price', () => {
-    const v = createVariant();
-    v.changePrice(Money.fromCents(2000));
-    expect(v.price.cents).toBe(2000);
+    expect(v.sku.value).toBe('new-sku');
   });
 
   it('supports attribute management', () => {
@@ -308,8 +325,8 @@ describe('SKU uniqueness contract', () => {
     // The database will reject the second one via unique constraint.
     const now = new Date();
     const productId = ProductId.generate();
-    const v1 = new Variant(VariantId.generate(), productId, sku.value, {}, Money.ZERO, true, now, now);
-    const v2 = new Variant(VariantId.generate(), productId, sku.value, {}, Money.ZERO, true, now, now);
+    const v1 = new Variant(VariantId.generate(), productId, sku.value, {}, true, now, now);
+    const v2 = new Variant(VariantId.generate(), productId, sku.value, {}, true, now, now);
 
     // Domain doesn't prevent this — both exist in memory
     expect(v1.sku.equals(v2.sku)).toBe(true);

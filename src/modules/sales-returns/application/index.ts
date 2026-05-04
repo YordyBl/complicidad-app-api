@@ -21,3 +21,14 @@ export type {
   ReturnFullSaleCommand,
   ReturnFullSaleResponse,
 } from './use-cases/ReturnFullSaleUseCase.js';
+
+export { ListSalesUseCase } from './use-cases/ListSalesUseCase.js';
+export type { SaleSummary } from './use-cases/ListSalesUseCase.js';
+
+export { GetSaleDetailUseCase } from './use-cases/GetSaleDetailUseCase.js';
+export type {
+  GetSaleDetailCommand,
+  SaleDetailResponse,
+  SaleDetailLine,
+  SaleDetailConsumption,
+} from './use-cases/GetSaleDetailUseCase.js';

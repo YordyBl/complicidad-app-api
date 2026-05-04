@@ -15,9 +15,13 @@ import type { EntityManager } from 'typeorm';
 import type { UnitOfWork } from '../../shared/application/UnitOfWork.js';
 import { CustomerTypeOrmRepository } from '../customers/infrastructure/typeorm/CustomerTypeOrmRepository.js';
 import { VariantTypeOrmRepository } from '../inventory/infrastructure/typeorm/VariantTypeOrmRepository.js';
+import { ProductTypeOrmRepository } from '../inventory/infrastructure/typeorm/ProductTypeOrmRepository.js';
+import { SaleTypeOrmRepository } from './infrastructure/typeorm/SaleTypeOrmRepository.js';
 import { CreateSaleUseCase } from './application/use-cases/CreateSaleUseCase.js';
 import { CancelSaleUseCase } from './application/use-cases/CancelSaleUseCase.js';
 import { ReturnFullSaleUseCase } from './application/use-cases/ReturnFullSaleUseCase.js';
+import { ListSalesUseCase } from './application/use-cases/ListSalesUseCase.js';
+import { GetSaleDetailUseCase } from './application/use-cases/GetSaleDetailUseCase.js';
 import { SaleController } from './interfaces/http/SaleController.js';
 import { createSaleRouter } from './interfaces/http/sale-routes.js';
 
@@ -42,14 +46,25 @@ export function createSalesModule(manager?: EntityManager, uow?: UnitOfWork): Ro
   // Infrastructure
   const customerRepo = new CustomerTypeOrmRepository(manager);
   const variantRepo = new VariantTypeOrmRepository(manager);
+  const productRepo = new ProductTypeOrmRepository(manager);
+  const saleRepo = new SaleTypeOrmRepository(manager);
 
   // Application use cases
-  const createSaleUseCase = new CreateSaleUseCase(customerRepo, variantRepo);
+  const createSaleUseCase = new CreateSaleUseCase(customerRepo, variantRepo, productRepo);
   const cancelSaleUseCase = new CancelSaleUseCase();
   const returnFullSaleUseCase = new ReturnFullSaleUseCase();
+  const listSalesUseCase = new ListSalesUseCase(saleRepo);
+  const getSaleDetailUseCase = new GetSaleDetailUseCase(saleRepo);
 
   // HTTP controller
-  const controller = new SaleController(createSaleUseCase, cancelSaleUseCase, returnFullSaleUseCase, uow);
+  const controller = new SaleController(
+    createSaleUseCase,
+    cancelSaleUseCase,
+    returnFullSaleUseCase,
+    uow,
+    listSalesUseCase,
+    getSaleDetailUseCase,
+  );
 
   return createSaleRouter(controller);
 }

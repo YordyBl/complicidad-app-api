@@ -31,6 +31,22 @@ export const env = {
     password: optional('DB_PASSWORD', ''),
     synchronize: optional('DB_SYNC', 'false') === 'true',
   },
+  cors: {
+    /**
+     * Comma-separated list of allowed origins.
+     * In development: "http://localhost:3001"
+     * In production: set via env var, never use wildcard.
+     * Docker server-to-server calls bypass CORS (same-network).
+     */
+    origins: optional('CORS_ORIGINS', 'http://localhost:3001')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    /** Allowed HTTP methods for preflight. */
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] as const,
+    /** Allowed request headers. */
+    allowedHeaders: ['Content-Type', 'Authorization'] as const,
+  },
 } as const;
 
 export type Env = typeof env;

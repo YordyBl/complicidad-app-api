@@ -18,15 +18,15 @@ export class InventoryController {
    * POST /purchases — register a new stock purchase (creates FIFO lots + cash outflow).
    */
   async registerPurchase(req: Request, res: Response): Promise<void> {
-    const { variantId, quantity, unitCostCents, supplierId, notes, purchaseDate } =
+    const { variantId, quantity, unitCost, supplierId, notes, purchaseDate } =
       req.body as Record<string, unknown>;
 
     if (typeof variantId !== 'string') {
       res.status(400).json({ error: 'ValidationError', message: 'variantId is required and must be a string' });
       return;
     }
-    if (typeof quantity !== 'number' || typeof unitCostCents !== 'number') {
-      res.status(400).json({ error: 'ValidationError', message: 'quantity and unitCostCents must be numbers' });
+    if (typeof quantity !== 'number' || typeof unitCost !== 'number') {
+      res.status(400).json({ error: 'ValidationError', message: 'quantity and unitCost must be numbers' });
       return;
     }
 
@@ -34,7 +34,7 @@ export class InventoryController {
       {
         variantId,
         quantity,
-        unitCostCents,
+        unitCost,
         supplierId: typeof supplierId === 'string' ? supplierId : undefined,
         notes: typeof notes === 'string' ? notes : undefined,
         purchaseDate: typeof purchaseDate === 'string' ? purchaseDate : undefined,

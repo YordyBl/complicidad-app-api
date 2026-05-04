@@ -2,6 +2,7 @@
  * TypeORM entity for the `variants` table.
  *
  * SKU has a unique constraint at the database level.
+ * Variants do NOT store prices — pricing is owned by the Product entity.
  */
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../../../../infrastructure/typeorm/BaseEntity.js';
@@ -21,9 +22,6 @@ export class VariantEntity extends BaseEntity {
 
   @Column({ type: 'jsonb', default: {} })
   attributes!: Record<string, string>;
-
-  @Column({ name: 'price_cents', type: 'int' })
-  priceCents!: number;
 
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;

@@ -2,7 +2,8 @@
  * TypeORM DataSource singleton and factory.
  *
  * The DataSource is created once and shared across the application.
- * Modules register their entities dynamically via `addEntities()`.
+ * Entity classes are imported directly (not via glob patterns) so that
+ * vitest's module transformation pipeline handles them correctly.
  *
  * The migration path is relative to the project root — TypeORM resolves
  * it at runtime.
@@ -12,15 +13,38 @@ import { DataSource } from 'typeorm';
 import { getDatabaseConfig } from '../../config/database.js';
 import type { DataSourceOptions } from 'typeorm';
 
+// ── Entity imports ────────────────────────────────────────────
+// Direct class references so vitest transpiles TypeScript decorators.
+import { ProductEntity } from '../../modules/inventory/infrastructure/typeorm/ProductEntity.js';
+import { VariantEntity } from '../../modules/inventory/infrastructure/typeorm/VariantEntity.js';
+import { InventoryLotEntity } from '../../modules/inventory/infrastructure/typeorm/InventoryLotEntity.js';
+import { PurchaseEntity } from '../../modules/inventory/infrastructure/typeorm/PurchaseEntity.js';
+import { SupplierEntity } from '../../modules/inventory/infrastructure/typeorm/SupplierEntity.js';
+import { CustomerEntity } from '../../modules/customers/infrastructure/typeorm/CustomerEntity.js';
+import { SaleEntity } from '../../modules/sales-returns/infrastructure/typeorm/SaleEntity.js';
+import { SaleLineEntity } from '../../modules/sales-returns/infrastructure/typeorm/SaleLineEntity.js';
+import { LotConsumptionRecordEntity } from '../../modules/sales-returns/infrastructure/typeorm/LotConsumptionRecordEntity.js';
+import { CashClosingEntity } from '../../modules/accounting-reports/infrastructure/typeorm/CashClosingEntity.js';
+import { CashLedgerEntryEntity } from '../../modules/accounting-reports/infrastructure/typeorm/CashLedgerEntryEntity.js';
+import { UserEntity } from '../../modules/auth-users/infrastructure/typeorm/UserEntity.js';
+
 let dataSource: DataSource | null = null;
 
 const dataSourceOptions: DataSourceOptions = {
   ...getDatabaseConfig(),
   entities: [
-    // Shared infrastructure entities
-    'src/infrastructure/typeorm/entities/**/*.ts',
-    // Module-specific entities (each module owns its TypeORM entity)
-    'src/modules/*/infrastructure/typeorm/**/*.ts',
+    ProductEntity,
+    VariantEntity,
+    InventoryLotEntity,
+    PurchaseEntity,
+    SupplierEntity,
+    CustomerEntity,
+    SaleEntity,
+    SaleLineEntity,
+    LotConsumptionRecordEntity,
+    CashClosingEntity,
+    CashLedgerEntryEntity,
+    UserEntity,
   ],
   migrations: ['src/infrastructure/typeorm/migrations/**/*.ts'],
 };

@@ -6,7 +6,6 @@ import { Variant } from '../../domain/Variant.js';
 import { VariantId } from '../../domain/VariantId.js';
 import { ProductId } from '../../domain/ProductId.js';
 import { Sku } from '../../domain/Sku.js';
-import { Money } from '../../../../shared/domain/Money.js';
 import { VariantEntity } from './VariantEntity.js';
 
 export class VariantMapper implements BaseMapper<Variant, VariantEntity> {
@@ -16,7 +15,6 @@ export class VariantMapper implements BaseMapper<Variant, VariantEntity> {
       ProductId.from(entity.productId),
       Sku.fromUnsafe(entity.sku),
       entity.attributes,
-      Money.fromCents(entity.priceCents),
       entity.isActive,
       entity.createdAt,
       entity.updatedAt,
@@ -29,7 +27,6 @@ export class VariantMapper implements BaseMapper<Variant, VariantEntity> {
     entity.productId = domain.productId.toString();
     entity.sku = domain.sku.toString();
     entity.attributes = { ...domain.attributes };
-    entity.priceCents = domain.price.cents;
     entity.isActive = domain.isActive;
     return entity;
   }

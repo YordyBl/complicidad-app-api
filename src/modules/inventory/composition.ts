@@ -12,6 +12,7 @@ import { VariantTypeOrmRepository } from './infrastructure/typeorm/VariantTypeOr
 import { CreateProductUseCase } from './application/use-cases/CreateProductUseCase.js';
 import { SearchItemUseCase } from './application/use-cases/SearchItemUseCase.js';
 import { RegisterPurchaseUseCase } from './application/use-cases/RegisterPurchaseUseCase.js';
+import { ListProductsUseCase } from './application/use-cases/ListProductsUseCase.js';
 import { ProductController } from './interfaces/http/ProductController.js';
 import { InventoryController } from './interfaces/http/InventoryController.js';
 import { createInventoryRouter } from './interfaces/http/inventory-routes.js';
@@ -42,9 +43,10 @@ export function createInventoryModule(manager?: EntityManager, uow?: UnitOfWork)
   const createProductUseCase = new CreateProductUseCase(productRepo, variantRepo);
   const searchItemUseCase = new SearchItemUseCase(variantRepo, productRepo);
   const registerPurchaseUseCase = new RegisterPurchaseUseCase(variantRepo);
+  const listProductsUseCase = new ListProductsUseCase(productRepo);
 
   // HTTP controllers
-  const productController = new ProductController(createProductUseCase, searchItemUseCase);
+  const productController = new ProductController(createProductUseCase, searchItemUseCase, listProductsUseCase);
   const inventoryController = new InventoryController(registerPurchaseUseCase, uow);
 
   return createInventoryRouter(productController, inventoryController);

@@ -18,6 +18,10 @@ export function createInventoryRouter(
     void productController.create(req, res).catch(next);
   });
 
+  router.get('/products', (req, res, next) => {
+    void productController.list(req, res).catch(next);
+  });
+
   // ── Item search ────────────────────────────────────────────
   router.get('/items/search', (req, res, next) => {
     void productController.search(req, res).catch(next);

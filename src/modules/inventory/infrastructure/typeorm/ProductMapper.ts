@@ -15,7 +15,11 @@ export class ProductMapper implements BaseMapper<Product, ProductEntity> {
       ProductId.from(entity.id),
       entity.name,
       entity.description,
-      Money.fromCents(entity.basePriceCents),
+      entity.baseSku,
+      Money.fromCents(entity.salePriceCents),
+      entity.presalePriceCents != null
+        ? Money.fromCents(entity.presalePriceCents)
+        : null,
       aliases,
       entity.isActive,
       entity.createdAt,
@@ -28,7 +32,9 @@ export class ProductMapper implements BaseMapper<Product, ProductEntity> {
     entity.id = domain.id.toString();
     entity.name = domain.name;
     entity.description = domain.description;
-    entity.basePriceCents = domain.basePrice.cents;
+    entity.baseSku = domain.baseSku;
+    entity.salePriceCents = domain.salePrice.cents;
+    entity.presalePriceCents = domain.presalePrice !== null ? domain.presalePrice.cents : null;
     entity.aliases = domain.aliases.map((a) => a.toString());
     entity.isActive = domain.isActive;
     return entity;

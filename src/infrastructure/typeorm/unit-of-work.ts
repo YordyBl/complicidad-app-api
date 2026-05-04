@@ -9,22 +9,33 @@
  */
 import { DataSource, EntityManager } from 'typeorm';
 import type { UnitOfWork, UnitOfWorkScope } from '../../shared/application/UnitOfWork.js';
+import { SaleTypeOrmRepository } from '../../modules/sales-returns/infrastructure/typeorm/SaleTypeOrmRepository.js';
+import { InventoryLotTypeOrmRepository } from '../../modules/inventory/infrastructure/typeorm/InventoryLotTypeOrmRepository.js';
+import { CashLedgerTypeOrmRepository } from '../../modules/accounting-reports/infrastructure/typeorm/CashLedgerTypeOrmRepository.js';
+import { PurchaseTypeOrmRepository } from '../../modules/inventory/infrastructure/typeorm/PurchaseTypeOrmRepository.js';
 
 /**
  * Scoped repository container bound to the active transaction.
  *
- * Modules add their repositories here as they are implemented.
- * The type assertion in use cases (e.g. `scope as PurchaseScope`)
- * provides type safety at the call site without coupling the
- * generic scope to specific modules.
+ * Every repository here shares the same EntityManager — all operations
+ * participate in the same database transaction.
+ *
+ * The type assertion in use cases (e.g. `scope as SaleScope`)
+ * provides type safety at the call site. Keep this class as a flat
+ * bag of instantiated repos; do NOT couple it to module-specific
+ * interfaces directly.
  */
 export class TypeOrmUnitOfWorkScope implements UnitOfWorkScope {
+  readonly sales: SaleTypeOrmRepository;
+  readonly inventoryLots: InventoryLotTypeOrmRepository;
+  readonly cashLedger: CashLedgerTypeOrmRepository;
+  readonly purchases: PurchaseTypeOrmRepository;
+
   constructor(protected readonly manager: EntityManager) {
-    // Future: inject scoped repositories here
-    // this.products = new TypeOrmProductRepository(manager);
-    // this.inventoryLots = new TypeOrmInventoryLotRepository(manager);
-    // this.purchases = new TypeOrmPurchaseRepository(manager);
-    // this.cashLedger = new TypeOrmCashLedgerRepository(manager);
+    this.sales = new SaleTypeOrmRepository(manager);
+    this.inventoryLots = new InventoryLotTypeOrmRepository(manager);
+    this.cashLedger = new CashLedgerTypeOrmRepository(manager);
+    this.purchases = new PurchaseTypeOrmRepository(manager);
   }
 }
 

@@ -1,11 +1,15 @@
 # =============================================================================
-# Complicidad Backend — Docker Compose
+# Complicidad — Docker Compose
 #
-# Starts PostgreSQL 16 and the API server.
+# Starts PostgreSQL 16, the API server, and the Next.js frontend.
+#
+# Origins:
+#   - Browser frontend origin: http://localhost:3001 (CORS_ALLOWED in API)
+#   - Server-to-server API calls: http://api:3000 (Docker internal DNS)
 #
 # Usage:
 #   cp .env.example .env        # edit vars as needed
-#   docker compose up -d        # start both services
+#   docker compose up -d        # start all services
 #   docker compose logs -f api  # watch API logs
 #   docker compose down         # stop and remove containers
 #   docker compose down -v      # also delete the DB volume
@@ -42,6 +46,7 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3000
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3001}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       DB_HOST: postgres
       DB_PORT: 5432
@@ -58,6 +63,30 @@ services:
       - "${API_PORT:-3000}:3000"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+
+  # ---- Frontend (Next.js) ----
+  frontend:
+    build:
+      context: ../complicidad-APP
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      # Server-to-server: uses Docker internal service DNS
+      API_BASE_URL: http://api:3000
+      FRONTEND_ORIGIN: http://localhost:3001
+    ports:
+      - "${FRONTEND_PORT:-3001}:3001"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/"]
       interval: 30s
       timeout: 3s
       retries: 3

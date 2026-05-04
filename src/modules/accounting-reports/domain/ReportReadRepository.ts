@@ -25,6 +25,8 @@ export interface StockByProductItem {
 export interface LotReportItem {
   lotId: string;
   variantId: string;
+  sku: string;
+  productName: string;
   purchaseDate: Date;
   purchasedQuantity: number;
   remainingQuantity: number;

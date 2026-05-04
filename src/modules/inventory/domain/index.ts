@@ -18,3 +18,4 @@ export type { VariantRepository } from './VariantRepository.js';
 export type { SupplierRepository } from './SupplierRepository.js';
 export type { PurchaseRepository } from './PurchaseRepository.js';
 export type { InventoryLotRepository } from './InventoryLotRepository.js';
+export type { ProductListReadRepository, ListProductsQuery, ListProductsResult, ProductListItem, ProductVariantSummary, ListProductsMeta, ListProductsFilters } from './ProductListReadRepository.js';

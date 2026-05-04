@@ -94,6 +94,11 @@ class FakeSaleRepository implements SaleRepository {
       .filter((s) => s.customerId === customerId)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
+
+  async findAll(): Promise<SaleEntity[]> {
+    return Array.from(this.sales.values())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
 }
 
 class FakeCashLedgerRepository implements CashLedgerRepository {
@@ -171,6 +176,7 @@ function createPopulatedSale(
     'v1',
     8, // total quantity
     Money.fromCents(1000), // unit price
+    'regular',
     [c1, c2],
   );
 
@@ -231,7 +237,7 @@ describe('CancelSaleUseCase', () => {
     it('handles single-lot sale correctly', async () => {
       const c = makeConsumption('c1', 'lot-1', 10, 500);
       const line = new SaleLine(
-        SaleLineId.from('line-1'), 'v1', 10, Money.fromCents(2000), [c],
+        SaleLineId.from('line-1'), 'v1', 10, Money.fromCents(2000), 'regular', [c],
       );
       const sale = new SaleEntity(
         SaleIdEntity.from('sale-single'), 'customer-1', 'channel-1', [line], 'ACTIVE', new Date(), new Date(),
@@ -314,7 +320,7 @@ describe('CancelSaleUseCase', () => {
       // Create a sale but don't add the referenced lots → will fail restoration
       const c = makeConsumption('c1', 'non-existent-lot', 5, 200);
       const line = new SaleLine(
-        SaleLineId.from('line-1'), 'v1', 5, Money.fromCents(1000), [c],
+        SaleLineId.from('line-1'), 'v1', 5, Money.fromCents(1000), 'regular', [c],
       );
       const sale = new SaleEntity(
         SaleIdEntity.from('sale-fail'), 'customer-1', 'channel-1', [line], 'ACTIVE', new Date(), new Date(),
@@ -473,7 +479,7 @@ describe('ReturnFullSaleUseCase', () => {
     it('rolls back return on failure, keeping sale active and lots unchanged', async () => {
       const c = makeConsumption('c1', 'missing-lot', 5, 200);
       const line = new SaleLine(
-        SaleLineId.from('line-1'), 'v1', 5, Money.fromCents(1000), [c],
+        SaleLineId.from('line-1'), 'v1', 5, Money.fromCents(1000), 'regular', [c],
       );
       const sale = new SaleEntity(
         SaleIdEntity.from('return-fail'), 'customer-1', 'channel-1', [line], 'ACTIVE', new Date(), new Date(),

@@ -53,6 +53,7 @@ function makeLine(
     variantId,
     qty,
     Money.fromCents(unitPriceCents),
+    'regular',
     consumptions,
   );
 }

@@ -2,7 +2,9 @@
  * TypeORM entity for the `sale_lines` table.
  *
  * Each line belongs to a sale and references a variant.
- * Line-level lot consumptions are tracked via @OneToMany.
+ * Stores the priceType (regular|presale) and a snapshot of the
+ * resolved unitPriceCents at sale time. Line-level lot consumptions
+ * are tracked via @OneToMany.
  */
 import { Entity, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { BaseEntity } from '../../../../infrastructure/typeorm/BaseEntity.js';
@@ -23,6 +25,9 @@ export class SaleLineEntity extends BaseEntity {
 
   @Column({ name: 'unit_price_cents', type: 'int' })
   unitPriceCents!: number;
+
+  @Column({ name: 'price_type', type: 'varchar', length: 10, default: 'regular' })
+  priceType!: string;
 
   @OneToMany(() => LotConsumptionRecordEntity, (record) => record.saleLine, {
     cascade: ['insert', 'update'],

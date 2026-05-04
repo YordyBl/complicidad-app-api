@@ -1,14 +1,13 @@
 /**
  * Pure domain entity for a Product Variant.
  *
- * A Variant represents a specific version of a Product (e.g. size, color).
- * Each Variant has a unique SKU (at the persistence boundary), its own
- * public price, and attributes describing the variation.
+ * A Variant represents a specific version of a Product (e.g. size).
+ * Each Variant has a unique SKU and attributes describing the variation.
+ * Variants do NOT own prices — pricing is owned by the Product aggregate.
  *
  * Stock is NOT stored directly on the Variant — it is DERIVED from
  * the sum of remaining quantities across all PurchaseLots for this variant.
  */
-import type { Money } from '../../../shared/domain/Money.js';
 import type { VariantId } from './VariantId.js';
 import type { ProductId } from './ProductId.js';
 import type { Sku } from './Sku.js';
@@ -19,7 +18,6 @@ export class Variant {
     private readonly _productId: ProductId,
     private _sku: Sku,
     private _attributes: Record<string, string>,
-    private _price: Money,
     private _isActive: boolean,
     private readonly _createdAt: Date,
     private _updatedAt: Date,
@@ -44,10 +42,6 @@ export class Variant {
     return this._attributes;
   }
 
-  get price(): Money {
-    return this._price;
-  }
-
   get isActive(): boolean {
     return this._isActive;
   }
@@ -64,11 +58,6 @@ export class Variant {
 
   changeSku(sku: Sku): void {
     this._sku = sku;
-    this._updatedAt = new Date();
-  }
-
-  changePrice(price: Money): void {
-    this._price = price;
     this._updatedAt = new Date();
   }
 

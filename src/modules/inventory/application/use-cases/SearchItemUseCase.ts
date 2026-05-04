@@ -26,7 +26,10 @@ export interface ResolvedItem {
   productName: string;
   variantId: string;
   variantSku: string;
-  variantPriceCents: number;
+  /** Regular sale price in soles (from Product). */
+  salePrice: number;
+  /** Presale price in soles (from Product), null when not set. */
+  presalePrice: number | null;
   variantAttributes: Record<string, string>;
 }
 
@@ -65,7 +68,8 @@ export class SearchItemUseCase {
               productName: product?.name ?? 'Unknown',
               variantId: variant.id.toString(),
               variantSku: variant.sku.value,
-              variantPriceCents: variant.price.cents,
+              salePrice: product?.salePrice.cents != null ? product.salePrice.cents / 100 : 0,
+              presalePrice: product?.presalePrice?.cents != null ? product.presalePrice.cents / 100 : null,
               variantAttributes: { ...variant.attributes },
             },
           ],
@@ -91,7 +95,8 @@ export class SearchItemUseCase {
           productName: product.name,
           variantId: variant.id.toString(),
           variantSku: variant.sku.value,
-          variantPriceCents: variant.price.cents,
+          salePrice: product.salePrice.cents / 100,
+          presalePrice: product.presalePrice?.cents != null ? product.presalePrice.cents / 100 : null,
           variantAttributes: { ...variant.attributes },
         });
       }

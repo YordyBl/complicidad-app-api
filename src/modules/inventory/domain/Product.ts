@@ -1,8 +1,12 @@
 /**
  * Pure domain entity for a Product (aggregate root).
  *
- * A Product is a base item template with a public base price and
- * searchable aliases. Each Product has one or more Variants.
+ * A Product owns sale and optional presale/preventa prices.
+ * Each Product has one or more Variants (sizes). Variants do NOT
+ * have their own prices — all pricing is owned by the Product.
+ *
+ * Sale items reference a variant but the authoritative unit price
+ * is resolved from the Product based on priceType (regular|presale).
  */
 import type { Money } from '../../../shared/domain/Money.js';
 import type { ProductId } from './ProductId.js';
@@ -13,7 +17,9 @@ export class Product {
     private readonly _id: ProductId,
     private _name: string,
     private _description: string | null,
-    private _basePrice: Money,
+    private readonly _baseSku: string,
+    private _salePrice: Money,
+    private _presalePrice: Money | null,
     private _aliases: Alias[],
     private _isActive: boolean,
     private readonly _createdAt: Date,
@@ -35,8 +41,30 @@ export class Product {
     return this._description;
   }
 
-  get basePrice(): Money {
-    return this._basePrice;
+  /** Lowercase-normalized base SKU used to generate variant SKUs. */
+  get baseSku(): string {
+    return this._baseSku;
+  }
+
+  /** Regular sale price (never null). */
+  get salePrice(): Money {
+    return this._salePrice;
+  }
+
+  /** Presale/preventa price (null when no presale is active). */
+  get presalePrice(): Money | null {
+    return this._presalePrice;
+  }
+
+  /**
+   * Resolve the authoritative unit price for a given price type.
+   * Falls back to salePrice when presalePrice is null and priceType is 'presale'.
+   */
+  resolveUnitPrice(priceType: 'regular' | 'presale'): Money {
+    if (priceType === 'presale' && this._presalePrice) {
+      return this._presalePrice;
+    }
+    return this._salePrice;
   }
 
   get aliases(): readonly Alias[] {
@@ -67,8 +95,13 @@ export class Product {
     this._updatedAt = new Date();
   }
 
-  changeBasePrice(price: Money): void {
-    this._basePrice = price;
+  changeSalePrice(price: Money): void {
+    this._salePrice = price;
+    this._updatedAt = new Date();
+  }
+
+  changePresalePrice(price: Money | null): void {
+    this._presalePrice = price;
     this._updatedAt = new Date();
   }
 

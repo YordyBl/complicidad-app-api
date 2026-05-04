@@ -17,6 +17,7 @@ import request from 'supertest';
 import express, { json, type Express } from 'express';
 import { errorMiddleware } from '../../src/infrastructure/http/index.js';
 import { LoginUseCase } from '../../src/modules/auth-users/application/use-cases/LoginUseCase.js';
+import { RegisterUserUseCase } from '../../src/modules/auth-users/application/use-cases/RegisterUserUseCase.js';
 import { AuthController } from '../../src/modules/auth-users/interfaces/http/AuthController.js';
 import { createAuthRouter } from '../../src/modules/auth-users/interfaces/http/auth-routes.js';
 import { User } from '../../src/modules/auth-users/domain/User.js';
@@ -45,6 +46,7 @@ import { Customer } from '../../src/modules/customers/domain/Customer.js';
 import { CustomerId } from '../../src/modules/customers/domain/CustomerId.js';
 import { Variant as VariantEntity } from '../../src/modules/inventory/domain/Variant.js';
 import { VariantId as VariantIdEntity } from '../../src/modules/inventory/domain/VariantId.js';
+import { Product as ProductEntity } from '../../src/modules/inventory/domain/Product.js';
 import { ProductId as ProductIdEntity } from '../../src/modules/inventory/domain/ProductId.js';
 import { Sku as SkuEntity } from '../../src/modules/inventory/domain/Sku.js';
 import { Sale as SaleEntity } from '../../src/modules/sales-returns/domain/Sale.js';
@@ -176,6 +178,10 @@ class FakeSaleRepo implements SaleRepository {
     return Array.from(this.sales.values()).filter((s) => s.customerId === cId)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
+  async findAll(): Promise<SaleEntity[]> {
+    return Array.from(this.sales.values())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
 }
 
 class FakeCashLedgerRepo implements CashLedgerRepository {
@@ -271,13 +277,22 @@ class FakeCashClosingRepo implements CashClosingRepository {
 
 // ── Fixtures ──────────────────────────────────────────────────
 
-function createTestVariant(id: string, skuStr: string): VariantEntity {
+function createTestVariant(id: string, skuStr: string, productId?: string): VariantEntity {
   const skuResult = SkuEntity.from(skuStr);
   if (!skuResult.ok) throw new Error('Invalid SKU');
   return new VariantEntity(
-    VariantIdEntity.from(id), ProductIdEntity.generate(), skuResult.value,
-    {}, Money.fromCents(1000), true,
+    VariantIdEntity.from(id), ProductIdEntity.from(productId ?? ProductIdEntity.generate().toString()), skuResult.value,
+    {}, true,
     new Date('2026-01-01'), new Date('2026-01-01'),
+  );
+}
+
+function createTestProduct(id: string, salePriceCents: number): ProductEntity {
+  return new ProductEntity(
+    ProductIdEntity.from(id), 'Test Product', null,
+    'test-product',
+    Money.fromCents(salePriceCents), null, [],
+    true, new Date('2026-01-01'), new Date('2026-01-01'),
   );
 }
 
@@ -298,6 +313,7 @@ interface TestInfra {
   saleRepo: FakeSaleRepo;
   cashRepo: FakeCashLedgerRepo;
   purchaseRepo: FakePurchaseRepo;
+  productRepo: FakeProductRepo;
   reportRepo: FakeReportRepo;
   app: Express;
 }
@@ -325,6 +341,7 @@ function createTestApp(): TestInfra {
   ));
   const authController = new AuthController(
     new LoginUseCase(userRepo, new FakePasswordHasher(), new FakeTokenService()),
+    new RegisterUserUseCase(userRepo, new FakePasswordHasher()),
   );
   const authRouter = createAuthRouter(authController);
 
@@ -339,7 +356,7 @@ function createTestApp(): TestInfra {
 
   // Sales
   const saleRouter = createSaleRouter(new SaleController(
-    new CreateSaleUseCase(customerRepo, variantRepo),
+    new CreateSaleUseCase(customerRepo, variantRepo, productRepo),
     new CancelSaleUseCase(),
     new ReturnFullSaleUseCase(),
     uow,
@@ -369,7 +386,7 @@ function createTestApp(): TestInfra {
   app.use(reportRouter);
   app.use(errorMiddleware);
 
-  return { customerRepo, variantRepo, lotRepo, saleRepo, cashRepo, purchaseRepo, reportRepo, app };
+  return { customerRepo, variantRepo, lotRepo, saleRepo, cashRepo, purchaseRepo, productRepo, reportRepo, app };
 }
 
 // ── Tests ──────────────────────────────────────────────────────
@@ -384,7 +401,7 @@ describe('Full-flow E2E: login → purchase → sale → return → reports', ()
   });
 
   it('should complete the full flow end-to-end', async () => {
-    const { customerRepo, variantRepo, lotRepo, saleRepo, cashRepo } = infra;
+    const { customerRepo, variantRepo, lotRepo, saleRepo, cashRepo, productRepo } = infra;
 
     // ── Step 1: Login ─────────────────────────────────────────
     const loginRes = await request(app)
@@ -398,22 +415,27 @@ describe('Full-flow E2E: login → purchase → sale → return → reports', ()
     customerRepo.customers.set(customer.id.toString(), customer);
 
     // ── Step 3: Set up variants ───────────────────────────────
-    const variant1 = createTestVariant('e2e-v1', 'PROD-A');
-    const variant2 = createTestVariant('e2e-v2', 'PROD-B');
+    const variant1 = createTestVariant('e2e-v1', 'prod-a', 'e2e-prod-1');
+    const variant2 = createTestVariant('e2e-v2', 'prod-b', 'e2e-prod-2');
+    // Products must exist with sale prices
+    const product1 = createTestProduct('e2e-prod-1', 2000);
+    const product2 = createTestProduct('e2e-prod-2', 5000);
     variantRepo.setVariant(variant1);
     variantRepo.setVariant(variant2);
+    await productRepo.save(product1);
+    await productRepo.save(product2);
 
     // ── Step 4: Register purchases (create FIFO lots) ────────
     const p1Res = await request(app)
       .post('/purchases')
-      .send({ variantId: 'e2e-v1', quantity: 10, unitCostCents: 500, notes: 'Initial stock' });
+      .send({ variantId: 'e2e-v1', quantity: 10, unitCost: 5.00, notes: 'Initial stock' });
     expect(p1Res.status).toBe(201);
     expect(p1Res.body.lotId).toBeDefined();
     const lot1Id = p1Res.body.lotId as string;
 
     const p2Res = await request(app)
       .post('/purchases')
-      .send({ variantId: 'e2e-v2', quantity: 5, unitCostCents: 1200 });
+      .send({ variantId: 'e2e-v2', quantity: 5, unitCost: 12.00 });
     expect(p2Res.status).toBe(201);
 
     // Verify lots created and cash entries recorded
@@ -433,30 +455,30 @@ describe('Full-flow E2E: login → purchase → sale → return → reports', ()
         customerId: 'e2e-customer-1',
         channelReference: 'shopify-order-999',
         items: [
-          { variantId: 'e2e-v1', quantity: 3, unitPriceCents: 2000 },
-          { variantId: 'e2e-v2', quantity: 2, unitPriceCents: 5000 },
+          { variantId: 'e2e-v1', quantity: 3, priceType: 'regular' },
+          { variantId: 'e2e-v2', quantity: 2, priceType: 'regular' },
         ],
       });
     expect(saleRes.status).toBe(201);
     expect(saleRes.body.saleId).toBeDefined();
-    // Revenue: 3*2000 + 2*5000 = 16000
-    expect(saleRes.body.totalRevenueCents).toBe(16000);
-    // Cost: 3*500 + 2*1200 = 3900
-    expect(saleRes.body.totalCostCents).toBe(3900);
-    // Profit: 16000 - 3900 = 12100
-    expect(saleRes.body.grossProfitCents).toBe(12100);
+    // Revenue: 3*20 + 2*50 = 160 (soles)
+    expect(saleRes.body.totalRevenue).toBe(160);
+    // Cost: 3*5 + 2*12 = 39 (soles)
+    expect(saleRes.body.totalCost).toBe(39);
+    // Profit: 160 - 39 = 121 (soles)
+    expect(saleRes.body.grossProfit).toBe(121);
     const saleId = saleRes.body.saleId as string;
 
     // Verify lots consumed
     const lot1 = lotRepo.lots.get(lot1Id);
     expect(lot1?.remainingQuantity).toBe(7); // 10 - 3
 
-    // Verify cash entry for sale income
+    // Verify cash entry for sale income (16000 cents from sale)
     const saleCashEntries = cashRepo.entries.filter((e) => e.type === 'SALE_INCOME');
     expect(saleCashEntries).toHaveLength(1);
     expect(saleCashEntries[0]!.amount.cents).toBe(16000);
 
-    // Cash now: -11000 + 16000 = 5000
+    // Cash now: -11000 + 16000 = 5000 cents
     expect(cashRepo.entries.reduce((s, e) => s + e.amount.cents, 0)).toBe(5000);
 
     // ── Step 6: Verify reports before return ──────────────────
@@ -532,7 +554,7 @@ describe('Full-flow E2E: login → purchase → sale → return → reports', ()
       .send({
         customerId: 'nonexistent',
         channelReference: 'test',
-        items: [{ variantId: 'e2e-v1', quantity: 1, unitPriceCents: 1000 }],
+        items: [{ variantId: 'e2e-v1', quantity: 1, priceType: 'regular' }],
       });
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('NotFoundError');
@@ -541,7 +563,7 @@ describe('Full-flow E2E: login → purchase → sale → return → reports', ()
   it('should return 404 for purchase with invalid variant', async () => {
     const res = await request(app)
       .post('/purchases')
-      .send({ variantId: 'nonexistent', quantity: 5, unitCostCents: 100 });
+      .send({ variantId: 'nonexistent', quantity: 5, unitCost: 1.00 });
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('NotFoundError');
   });

@@ -58,12 +58,12 @@ export interface CustomerHistorySummary {
   grossProfitCents: number;
 }
 
-export interface CustomerHistoryResponse {
+export interface CustomerHistoryResponse  {
   customerId: string;
   customerName: string;
-  sales: CustomerSaleSummary[];
+  sales: CustomerSaleSummary[] | [];
   summary: CustomerHistorySummary;
-}
+} 
 
 // ── Use Case ─────────────────────────────────────────────────
 
@@ -93,7 +93,21 @@ export class GetCustomerHistoryUseCase {
 
       // ── Load all sales for this customer ───────────────────
       const sales = await scope.sales.findByCustomerId(command.customerId);
-
+      if(sales.length === 0) {
+        return ok({
+            customerId: customer.id.toString(),
+        customerName: customer.name,
+        sales: [],
+        summary: {
+          totalSales: 0,
+          activeCount: 0,
+          cancelledCount: 0,
+          returnedCount: 0,
+          totalRevenueCents: 0,
+          totalCostCents: 0,
+          grossProfitCents: 0,
+        }
+      });}
       // ── Derive sale summaries ──────────────────────────────
       const saleSummaries: CustomerSaleSummary[] = sales.map((sale) => ({
         saleId: sale.id.toString(),

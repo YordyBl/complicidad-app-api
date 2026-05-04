@@ -106,7 +106,9 @@ function makeProduct(
     ProductId.from(id),
     name,
     null,
+    'test-sku',
     Money.fromCents(1000),
+    null,
     aliasObjs,
     true,
     new Date('2026-01-01'),
@@ -118,7 +120,6 @@ function makeVariant(
   id: string,
   productId: string,
   skuStr: string,
-  priceCents: number,
 ): Variant {
   const skuResult = Sku.from(skuStr);
   if (!skuResult.ok) throw new Error(`Invalid SKU: ${skuStr}`);
@@ -127,7 +128,6 @@ function makeVariant(
     ProductId.from(productId),
     skuResult.value,
     {},
-    Money.fromCents(priceCents),
     true,
     new Date('2026-01-01'),
     new Date('2026-01-01'),
@@ -161,12 +161,12 @@ describe('SearchItemUseCase', () => {
 
     // Variant A1 — 500ml bottle
     variantRepo.setVariant(
-      makeVariant(VARIANT_A1_ID, PRODUCT_A_ID, 'COLA-500ML', 1500),
+      makeVariant(VARIANT_A1_ID, PRODUCT_A_ID, 'cola-500ml'),
     );
 
     // Variant A2 — 1L bottle
     variantRepo.setVariant(
-      makeVariant(VARIANT_A2_ID, PRODUCT_A_ID, 'COLA-1L', 2500),
+      makeVariant(VARIANT_A2_ID, PRODUCT_A_ID, 'cola-1l'),
     );
 
     // Product B — lemon soda
@@ -178,7 +178,7 @@ describe('SearchItemUseCase', () => {
 
     // Variant B1
     variantRepo.setVariant(
-      makeVariant(VARIANT_B1_ID, PRODUCT_B_ID, 'LEMON-350ML', 1200),
+      makeVariant(VARIANT_B1_ID, PRODUCT_B_ID, 'lemon-350ml'),
     );
 
     const useCase = new SearchItemUseCase(variantRepo, productRepo);
@@ -188,13 +188,13 @@ describe('SearchItemUseCase', () => {
   it('resolves variant by exact SKU match', async () => {
     const { useCase } = createUseCase();
 
-    const result = await useCase.execute({ term: 'COLA-500ML' });
+    const result = await useCase.execute({ term: 'cola-500ml' });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.matchType).toBe('sku');
     expect(result.value.items).toHaveLength(1);
-    expect(result.value.items[0]!.variantSku).toBe('COLA-500ML');
+    expect(result.value.items[0]!.variantSku).toBe('cola-500ml');
     expect(result.value.items[0]!.variantId).toBe(VARIANT_A1_ID);
     expect(result.value.items[0]!.productName).toBe('Cola Drink 500ml');
   });
@@ -202,14 +202,14 @@ describe('SearchItemUseCase', () => {
   it('resolves variant by SKU with case-insensitive input', async () => {
     const { useCase } = createUseCase();
 
-    const result = await useCase.execute({ term: 'cola-500ml' });
-    // SKU is normalized to uppercase during Sku.from(), so lowercase input
+    const result = await useCase.execute({ term: 'COLA-500ML' });
+    // SKU is normalized to lowercase during Sku.from(), so uppercase input
     // should still match via VariantRepository.findBySku
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.matchType).toBe('sku');
-    expect(result.value.items[0]!.variantSku).toBe('COLA-500ML');
+    expect(result.value.items[0]!.variantSku).toBe('cola-500ml');
     expect(result.value.items[0]!.variantId).toBe(VARIANT_A1_ID);
   });
 
@@ -225,7 +225,7 @@ describe('SearchItemUseCase', () => {
     // Product A has 2 variants
     expect(result.value.items).toHaveLength(2);
     const skus = result.value.items.map((i) => i.variantSku).sort();
-    expect(skus).toEqual(['COLA-1L', 'COLA-500ML']);
+    expect(skus).toEqual(['cola-1l', 'cola-500ml']);
   });
 
   it('resolves variant by alias case-insensitively', async () => {
@@ -241,11 +241,11 @@ describe('SearchItemUseCase', () => {
 
   it('prefers SKU match over alias match', async () => {
     const { useCase } = createUseCase();
-    // "cola" is both a partial alias AND a possible SKU (but SKU is 'COLA-500ML')
-    // Since the search input "COLA-500ML" is a valid uppercase SKU, it should
+    // "cola" is both a partial alias AND a possible SKU (but SKU is 'cola-500ml')
+    // Since the search input "cola-500ml" is a valid SKU, it should
     // match by SKU first (not by the "cola" alias)
 
-    const result = await useCase.execute({ term: 'COLA-500ML' });
+    const result = await useCase.execute({ term: 'cola-500ml' });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;

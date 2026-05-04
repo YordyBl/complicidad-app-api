@@ -12,6 +12,7 @@ import type { Express } from 'express';
 import { createAuthRouter } from '../../../src/modules/auth-users/interfaces/http/auth-routes.js';
 import { AuthController } from '../../../src/modules/auth-users/interfaces/http/AuthController.js';
 import { LoginUseCase } from '../../../src/modules/auth-users/application/use-cases/LoginUseCase.js';
+import { RegisterUserUseCase } from '../../../src/modules/auth-users/application/use-cases/RegisterUserUseCase.js';
 import type { UserRepository } from '../../../src/modules/auth-users/domain/UserRepository.js';
 import type { PasswordHashService } from '../../../src/modules/auth-users/domain/PasswordHashService.js';
 import type { TokenService, TokenPayload } from '../../../src/modules/auth-users/domain/TokenService.js';
@@ -73,10 +74,10 @@ class FakeUserRepository implements UserRepository {
 
 // ── App factory ──────────────────────────────────────────────
 
-function createTestApp(loginUseCase: LoginUseCase): Express {
+function createTestApp(loginUseCase: LoginUseCase, registerUseCase: RegisterUserUseCase): Express {
   const app = express();
   app.use(json());
-  const controller = new AuthController(loginUseCase);
+  const controller = new AuthController(loginUseCase, registerUseCase);
   const router = createAuthRouter(controller);
   app.use('/auth', router);
   return app;
@@ -105,7 +106,8 @@ describe('POST /auth/login (E2E)', () => {
     const hasher = new FakePasswordHasher();
     const tokenService = new FakeTokenService();
     const loginUseCase = new LoginUseCase(repo, hasher, tokenService);
-    app = createTestApp(loginUseCase);
+    const registerUseCase = new RegisterUserUseCase(repo, hasher);
+    app = createTestApp(loginUseCase, registerUseCase);
   });
 
   it('should return 200 and a token for valid credentials', async () => {

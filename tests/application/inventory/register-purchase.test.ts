@@ -28,7 +28,6 @@ import { Variant as VariantEntity } from '../../../src/modules/inventory/domain/
 import { VariantId as VariantIdEntity } from '../../../src/modules/inventory/domain/VariantId.js';
 import { ProductId as ProductIdEntity } from '../../../src/modules/inventory/domain/ProductId.js';
 import { Sku as SkuEntity } from '../../../src/modules/inventory/domain/Sku.js';
-import { Money } from '../../../src/shared/domain/Money.js';
 import { NotFoundError } from '../../../src/shared/domain/errors.js';
 
 // ── Scope type ───────────────────────────────────────────────
@@ -162,7 +161,6 @@ function createTestVariant(): VariantEntity {
     ProductIdEntity.generate(),
     skuResult.value,
     {},
-    Money.fromCents(1000),
     true,
     new Date('2025-01-01'),
     new Date('2025-01-01'),
@@ -200,7 +198,7 @@ describe('RegisterPurchaseUseCase', () => {
       const command: RegisterPurchaseCommand = {
         variantId: variant.id.toString(),
         quantity: 10,
-        unitCostCents: 500,
+        unitCost: 5.00,
       };
 
       const result = await useCase.execute(command, createUow());
@@ -210,7 +208,7 @@ describe('RegisterPurchaseUseCase', () => {
 
       expect(result.value.purchaseId).toBeDefined();
       expect(result.value.lotId).toBeDefined();
-      expect(result.value.totalCostCents).toBe(5000); // 10 * 500
+      expect(result.value.totalCost).toBe(50); // 10 * 500
 
       // Verify lot was created
       expect(lotRepo.lots.size).toBe(1);
@@ -233,7 +231,7 @@ describe('RegisterPurchaseUseCase', () => {
       const command: RegisterPurchaseCommand = {
         variantId: variant.id.toString(),
         quantity: 5,
-        unitCostCents: 300,
+        unitCost: 3.00,
         supplierId: 'supplier-1',
         notes: 'Restock order',
       };
@@ -252,7 +250,7 @@ describe('RegisterPurchaseUseCase', () => {
       const command: RegisterPurchaseCommand = {
         variantId: variant.id.toString(),
         quantity: 3,
-        unitCostCents: 100,
+        unitCost: 1.00,
         purchaseDate: '2025-06-15T00:00:00.000Z',
       };
 
@@ -271,7 +269,7 @@ describe('RegisterPurchaseUseCase', () => {
       const command: RegisterPurchaseCommand = {
         variantId: variant.id.toString(),
         quantity: 0,
-        unitCostCents: 500,
+        unitCost: 5.00,
       };
 
       const result = await useCase.execute(command, createUow());
@@ -285,7 +283,7 @@ describe('RegisterPurchaseUseCase', () => {
       const command: RegisterPurchaseCommand = {
         variantId: variant.id.toString(),
         quantity: -1,
-        unitCostCents: 500,
+        unitCost: 5.00,
       };
 
       const result = await useCase.execute(command, createUow());
@@ -299,7 +297,7 @@ describe('RegisterPurchaseUseCase', () => {
       const command: RegisterPurchaseCommand = {
         variantId: variant.id.toString(),
         quantity: 10,
-        unitCostCents: -100,
+        unitCost: -1.00,
       };
 
       const result = await useCase.execute(command, createUow());
@@ -315,7 +313,7 @@ describe('RegisterPurchaseUseCase', () => {
       const command: RegisterPurchaseCommand = {
         variantId: 'non-existent-id',
         quantity: 5,
-        unitCostCents: 500,
+        unitCost: 5.00,
       };
 
       const result = await useCase.execute(command, createUow());
@@ -336,7 +334,7 @@ describe('RegisterPurchaseUseCase', () => {
       const command: RegisterPurchaseCommand = {
         variantId: 'non-existent',
         quantity: 10,
-        unitCostCents: 500,
+        unitCost: 5.00,
       };
 
       // This fails at variant lookup, before any writes happen

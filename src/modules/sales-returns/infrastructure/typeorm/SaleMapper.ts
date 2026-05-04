@@ -7,7 +7,7 @@
 import type { BaseMapper } from '../../../../infrastructure/typeorm/mappers/BaseMapper.js';
 import { Sale } from '../../domain/Sale.js';
 import { SaleId } from '../../domain/SaleId.js';
-import { SaleLine } from '../../domain/SaleLine.js';
+import { SaleLine, type PriceType } from '../../domain/SaleLine.js';
 import { SaleLineId } from '../../domain/SaleLineId.js';
 import { LotConsumptionRecord } from '../../domain/LotConsumptionRecord.js';
 import { Money } from '../../../../shared/domain/Money.js';
@@ -34,6 +34,7 @@ export class SaleMapper implements BaseMapper<Sale, SaleEntity> {
         lineEntity.variantId,
         lineEntity.quantity,
         Money.fromCents(lineEntity.unitPriceCents),
+        lineEntity.priceType as PriceType,
         consumptions,
       );
     });
@@ -62,6 +63,7 @@ export class SaleMapper implements BaseMapper<Sale, SaleEntity> {
       lineEntity.variantId = line.variantId;
       lineEntity.quantity = line.quantity;
       lineEntity.unitPriceCents = line.unitPrice.cents;
+      lineEntity.priceType = line.priceType;
 
       lineEntity.consumptions = line.consumptions.map((c) => {
         const recordEntity = new LotConsumptionRecordEntity();

@@ -106,6 +106,8 @@ function makeLotItem(overrides: Partial<LotReportItem> = {}): LotReportItem {
   return {
     lotId: 'lot-1',
     variantId: 'var-1',
+    sku: 'SKU-001',
+    productName: 'Test Product',
     purchaseDate: new Date('2026-01-01'),
     purchasedQuantity: 100,
     remainingQuantity: 30,
