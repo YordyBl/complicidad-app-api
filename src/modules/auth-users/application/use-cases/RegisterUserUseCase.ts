@@ -54,7 +54,7 @@ export class DuplicateUserEmailError extends BusinessRuleError {
   override readonly name = 'DuplicateUserEmailError' as const;
 
   constructor() {
-    super('A user with this email already exists');
+    super('Ya existe un usuario con este email');
   }
 }
 
@@ -145,18 +145,18 @@ export class RegisterUserUseCase {
     email: string,
   ): Result<string, InputValidationError> {
     if (!email) {
-      return err(new InputValidationError('Email is required and must not be empty'));
+      return err(new InputValidationError('El email es obligatorio y no puede estar vacío'));
     }
 
     const trimmed = email.trim().toLowerCase();
 
     if (trimmed.length === 0) {
-      return err(new InputValidationError('Email must not be empty'));
+      return err(new InputValidationError('El email no puede estar vacío'));
     }
 
     const atIndex = trimmed.indexOf('@');
     if (atIndex < 1 || atIndex === trimmed.length - 1) {
-      return err(new InputValidationError('Email format is invalid'));
+      return err(new InputValidationError('El formato del email es inválido'));
     }
 
     return ok(trimmed);
@@ -167,11 +167,11 @@ export class RegisterUserUseCase {
    */
   private validatePassword(password: string): Result<void, InputValidationError> {
     if (!password) {
-      return err(new InputValidationError('Password is required and must not be empty'));
+      return err(new InputValidationError('La contraseña es obligatoria y no puede estar vacía'));
     }
 
     if (password.length < 8) {
-      return err(new InputValidationError('Password must be at least 8 characters'));
+      return err(new InputValidationError('La contraseña debe tener al menos 8 caracteres'));
     }
 
     return ok(undefined);
@@ -186,14 +186,14 @@ export class RegisterUserUseCase {
     }
 
     if (typeof role !== 'string') {
-      return err(new InputValidationError('Role must be a string'));
+      return err(new InputValidationError('El rol debe ser un string'));
     }
 
     const trimmed = role.trim().toLowerCase();
     if (!USER_ROLES.includes(trimmed as UserRole)) {
       return err(
         new InputValidationError(
-          `Invalid role. Must be one of: ${USER_ROLES.join(', ')}`,
+          `Rol inválido. Debe ser uno de: ${USER_ROLES.join(', ')}`,
         ),
       );
     }

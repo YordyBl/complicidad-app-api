@@ -33,7 +33,7 @@ export function createCustomerModule(manager?: EntityManager, uow?: UnitOfWork):
     router.all('*', (_req, res) => {
       res.status(503).json({
         error: 'ServiceUnavailable',
-        message: 'Database not connected — customer endpoints unavailable',
+        message: 'Base de datos no conectada — endpoints de clientes no disponibles',
       });
     });
     return router;

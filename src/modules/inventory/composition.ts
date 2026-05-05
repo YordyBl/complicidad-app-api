@@ -9,6 +9,7 @@ import type { EntityManager } from 'typeorm';
 import type { UnitOfWork } from '../../shared/application/UnitOfWork.js';
 import { ProductTypeOrmRepository } from './infrastructure/typeorm/ProductTypeOrmRepository.js';
 import { VariantTypeOrmRepository } from './infrastructure/typeorm/VariantTypeOrmRepository.js';
+import { InventoryLotTypeOrmRepository } from './infrastructure/typeorm/InventoryLotTypeOrmRepository.js';
 import { CreateProductUseCase } from './application/use-cases/CreateProductUseCase.js';
 import { SearchItemUseCase } from './application/use-cases/SearchItemUseCase.js';
 import { RegisterPurchaseUseCase } from './application/use-cases/RegisterPurchaseUseCase.js';
@@ -29,7 +30,7 @@ export function createInventoryModule(manager?: EntityManager, uow?: UnitOfWork)
     router.all('*', (_req, res) => {
       res.status(503).json({
         error: 'ServiceUnavailable',
-        message: 'Database not connected — inventory endpoints unavailable',
+        message: 'Base de datos no conectada — endpoints de inventario no disponibles',
       });
     });
     return router;
@@ -38,10 +39,11 @@ export function createInventoryModule(manager?: EntityManager, uow?: UnitOfWork)
   // Infrastructure
   const productRepo = new ProductTypeOrmRepository(manager);
   const variantRepo = new VariantTypeOrmRepository(manager);
+  const lotRepo = new InventoryLotTypeOrmRepository(manager);
 
   // Application use cases
   const createProductUseCase = new CreateProductUseCase(productRepo, variantRepo);
-  const searchItemUseCase = new SearchItemUseCase(variantRepo, productRepo);
+  const searchItemUseCase = new SearchItemUseCase(variantRepo, productRepo, lotRepo);
   const registerPurchaseUseCase = new RegisterPurchaseUseCase(variantRepo);
   const listProductsUseCase = new ListProductsUseCase(productRepo);
 

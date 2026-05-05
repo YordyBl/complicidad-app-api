@@ -81,10 +81,10 @@ export class RegisterPurchaseUseCase {
   ): Promise<Result<RegisterPurchaseResponse>> {
     // ── Validate input ────────────────────────────────────
     if (command.quantity <= 0) {
-      return err(new InvalidQuantityError('Quantity must be positive'));
+      return err(new InvalidQuantityError('La cantidad debe ser positiva'));
     }
     if (command.unitCost < 0) {
-      return err(new InvalidQuantityError('Unit cost cannot be negative'));
+      return err(new InvalidQuantityError('El costo unitario no puede ser negativo'));
     }
 
     // Convert soles to cents (internal representation)

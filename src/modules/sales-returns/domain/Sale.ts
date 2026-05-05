@@ -39,13 +39,13 @@ export class Sale {
   ) {
     // ── Invariants ──────────────────────────────────────────
     if (!_channelReference || _channelReference.trim().length === 0) {
-      throw new BusinessRuleError('Channel reference is required');
+      throw new BusinessRuleError('La referencia de canal es obligatoria');
     }
     if (_lines.length === 0) {
-      throw new BusinessRuleError('Sale must have at least one line');
+      throw new BusinessRuleError('La venta debe tener al menos una línea');
     }
     if (!SALE_STATUSES.includes(_status)) {
-      throw new SaleStatusError(`Invalid sale status: "${_status}". Must be one of: ${SALE_STATUSES.join(', ')}`);
+      throw new SaleStatusError(`Estado de venta inválido: "${_status}". Debe ser uno de: ${SALE_STATUSES.join(', ')}`);
     }
   }
 
@@ -107,10 +107,10 @@ export class Sale {
   /** Cancel this sale. Throws if already cancelled or returned. */
   cancel(): void {
     if (this._status === 'CANCELLED') {
-      throw new SaleStatusError('Sale is already cancelled');
+      throw new SaleStatusError('La venta ya está cancelada');
     }
     if (this._status === 'RETURNED') {
-      throw new SaleStatusError('Cannot cancel a returned sale');
+      throw new SaleStatusError('No se puede cancelar una venta devuelta');
     }
     this._status = 'CANCELLED';
     this._updatedAt = new Date();
@@ -119,10 +119,10 @@ export class Sale {
   /** Mark this sale as returned (full return). Throws if already returned or cancelled. */
   markReturned(): void {
     if (this._status === 'RETURNED') {
-      throw new SaleStatusError('Sale has already been returned');
+      throw new SaleStatusError('La venta ya fue devuelta');
     }
     if (this._status === 'CANCELLED') {
-      throw new SaleStatusError('Cannot return a cancelled sale');
+      throw new SaleStatusError('No se puede devolver una venta cancelada');
     }
     this._status = 'RETURNED';
     this._updatedAt = new Date();

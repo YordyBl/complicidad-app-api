@@ -130,7 +130,7 @@ describe('POST /auth/login (E2E)', () => {
 
     expect(res.status).toBe(401);
     expect(res.body.error).toBe('AuthenticationError');
-    expect(res.body.message).toBe('Invalid credentials');
+    expect(res.body.message).toBe('Credenciales inválidas');
   });
 
   it('should return 401 for invalid password', async () => {
@@ -140,7 +140,7 @@ describe('POST /auth/login (E2E)', () => {
 
     expect(res.status).toBe(401);
     expect(res.body.error).toBe('AuthenticationError');
-    expect(res.body.message).toBe('Invalid credentials');
+    expect(res.body.message).toBe('Credenciales inválidas');
   });
 
   it('should return 400 for missing fields', async () => {

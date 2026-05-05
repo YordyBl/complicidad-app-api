@@ -154,7 +154,7 @@ describe('FIFO Allocation (allocateFifo)', () => {
       if (result.ok) return;
 
       expect(result.error).toBeInstanceOf(InsufficientStockError);
-      expect(result.error.message).toContain('Insufficient stock');
+      expect(result.error.message).toContain('Stock insuficiente');
     });
 
     it('returns error when only exhausted lots exist', () => {
@@ -256,7 +256,7 @@ describe('FIFO Lot entity behaviour', () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
 
-      expect(result.error.message).toContain('Cannot consume');
+      expect(result.error.message).toContain('No se pueden consumir');
       expect(lot.remainingQuantity).toBe(5); // unchanged
     });
 

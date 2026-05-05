@@ -105,7 +105,7 @@ describe('Sale domain — return/cancellation restoration', () => {
       const sale = makeActiveSale([line]);
       sale.cancel();
       expect(() => { sale.cancel(); }).toThrow(SaleStatusError);
-      expect(() => { sale.cancel(); }).toThrow('already cancelled');
+      expect(() => { sale.cancel(); }).toThrow('ya está cancelada');
     });
 
     it('throws on cancelling a returned sale', () => {
@@ -113,7 +113,7 @@ describe('Sale domain — return/cancellation restoration', () => {
       const sale = makeActiveSale([line]);
       sale.markReturned();
       expect(() => { sale.cancel(); }).toThrow(SaleStatusError);
-      expect(() => { sale.cancel(); }).toThrow('Cannot cancel a returned sale');
+      expect(() => { sale.cancel(); }).toThrow('No se puede cancelar una venta devuelta');
     });
   });
 
@@ -130,7 +130,7 @@ describe('Sale domain — return/cancellation restoration', () => {
       const sale = makeActiveSale([line]);
       sale.markReturned();
       expect(() => { sale.markReturned(); }).toThrow(SaleStatusError);
-      expect(() => { sale.markReturned(); }).toThrow('already been returned');
+      expect(() => { sale.markReturned(); }).toThrow('ya fue devuelta');
     });
 
     it('throws on returning a cancelled sale', () => {
@@ -138,7 +138,7 @@ describe('Sale domain — return/cancellation restoration', () => {
       const sale = makeActiveSale([line]);
       sale.cancel();
       expect(() => { sale.markReturned(); }).toThrow(SaleStatusError);
-      expect(() => { sale.markReturned(); }).toThrow('Cannot return a cancelled sale');
+      expect(() => { sale.markReturned(); }).toThrow('No se puede devolver una venta cancelada');
     });
   });
 
@@ -158,7 +158,7 @@ describe('Sale domain — return/cancellation restoration', () => {
     it('throws when restoring more than purchased quantity', () => {
       const lot = makeLot('lot-1', 'v1', 10, 7, 500);
       expect(() => { lot.restore(4); }).toThrow(LotConsumptionError);
-      expect(() => { lot.restore(4); }).toThrow('would exceed purchased quantity');
+      expect(() => { lot.restore(4); }).toThrow('superaría la cantidad comprada');
     });
 
     it('restores exact quantities from consumption records across multiple lots', () => {

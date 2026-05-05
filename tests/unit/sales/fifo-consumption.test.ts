@@ -177,27 +177,27 @@ describe('Sale domain — FIFO consumption calculations', () => {
       const line = makeLine('l1', 'v1', 1, 1000, []);
       expect(
         () => new Sale(SaleId.generate(), CUSTOMER_ID, '', [line], 'ACTIVE', SALE_DATE, SALE_DATE),
-      ).toThrow('Channel reference is required');
+      ).toThrow('La referencia de canal es obligatoria');
     });
 
     it('rejects sale with whitespace-only channel reference', () => {
       const line = makeLine('l1', 'v1', 1, 1000, []);
       expect(
         () => new Sale(SaleId.generate(), CUSTOMER_ID, '   ', [line], 'ACTIVE', SALE_DATE, SALE_DATE),
-      ).toThrow('Channel reference is required');
+      ).toThrow('La referencia de canal es obligatoria');
     });
 
     it('rejects sale with no lines', () => {
       expect(
         () => new Sale(SaleId.generate(), CUSTOMER_ID, CHANNEL, [], 'ACTIVE', SALE_DATE, SALE_DATE),
-      ).toThrow('Sale must have at least one line');
+      ).toThrow('La venta debe tener al menos una línea');
     });
 
     it('rejects invalid sale status', () => {
       const line = makeLine('l1', 'v1', 1, 1000, []);
       expect(
         () => new Sale(SaleId.generate(), CUSTOMER_ID, CHANNEL, [line], 'INVALID' as 'ACTIVE', SALE_DATE, SALE_DATE),
-      ).toThrow('Invalid sale status');
+      ).toThrow('Estado de venta inválido');
     });
   });
 
@@ -219,7 +219,7 @@ describe('Sale domain — FIFO consumption calculations', () => {
       const line = makeLine('l1', 'v1', 1, 1000, []);
       const sale = new Sale(SaleId.generate(), CUSTOMER_ID, CHANNEL, [line], 'ACTIVE', SALE_DATE, SALE_DATE);
       sale.cancel();
-      expect(() => { sale.cancel(); }).toThrow('Sale is already cancelled');
+      expect(() => { sale.cancel(); }).toThrow('La venta ya está cancelada');
     });
   });
 
@@ -227,19 +227,19 @@ describe('Sale domain — FIFO consumption calculations', () => {
     it('rejects line with zero quantity', () => {
       expect(
         () => new SaleLine(SaleLineId.from('l1'), 'v1', 0, Money.fromCents(1000), 'regular', []),
-      ).toThrow('Quantity must be positive');
+      ).toThrow('La cantidad debe ser positiva');
     });
 
     it('rejects line with negative quantity', () => {
       expect(
         () => new SaleLine(SaleLineId.from('l1'), 'v1', -1, Money.fromCents(1000), 'regular', []),
-      ).toThrow('Quantity must be positive');
+      ).toThrow('La cantidad debe ser positiva');
     });
 
     it('rejects line with negative unit price', () => {
       expect(
         () => new SaleLine(SaleLineId.from('l1'), 'v1', 1, Money.fromCents(-500), 'regular', []),
-      ).toThrow('Unit price cannot be negative');
+      ).toThrow('El precio unitario no puede ser negativo');
     });
   });
 

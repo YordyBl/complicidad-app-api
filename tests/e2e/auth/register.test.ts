@@ -218,7 +218,7 @@ describe('POST /api/v1/register (E2E)', () => {
 
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('InputValidationError');
-      expect(res.body.message).toContain('role');
+      expect(res.body.message).toContain('Rol');
     });
 
     it('should return 400 for non-string email', async () => {
@@ -256,7 +256,7 @@ describe('POST /api/v1/register (E2E)', () => {
 
       expect(res.status).toBe(409);
       expect(res.body.error).toBe('DuplicateUserEmailError');
-      expect(res.body.message).toContain('already exists');
+      expect(res.body.message).toContain('existe');
     });
 
     it('should return 409 when duplicate is caught at save (race condition)', async () => {

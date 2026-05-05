@@ -60,7 +60,7 @@ describe('Customer', () => {
         '',
         null, null, null, null, null, null,
         now, now,
-      )).toThrow('Customer name is required');
+      )).toThrow('El nombre del cliente es obligatorio');
     });
 
     it('rejects whitespace-only name', () => {
@@ -69,7 +69,7 @@ describe('Customer', () => {
         '   ',
         null, null, null, null, null, null,
         now, now,
-      )).toThrow('Customer name is required');
+      )).toThrow('El nombre del cliente es obligatorio');
     });
   });
 
@@ -117,7 +117,7 @@ describe('Customer', () => {
       const c = createValidCustomer();
       expect(() =>
         { c.updateProfile('', null, null, null, null, null, null, new Date()); }
-      ).toThrow('Customer name is required');
+      ).toThrow('El nombre del cliente es obligatorio');
     });
   });
 

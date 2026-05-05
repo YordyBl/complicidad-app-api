@@ -85,7 +85,7 @@ export class MissingChannelReferenceError extends BusinessRuleError {
   override readonly name = 'MissingChannelReferenceError' as const;
 
   constructor() {
-    super('Channel reference is required');
+    super('La referencia de canal es obligatoria');
   }
 }
 
@@ -93,7 +93,7 @@ export class EmptySaleError extends BusinessRuleError {
   override readonly name = 'EmptySaleError' as const;
 
   constructor() {
-    super('Sale must have at least one item');
+    super('La venta debe tener al menos un ítem');
   }
 }
 
@@ -105,7 +105,7 @@ export class InvalidPriceTypeError extends BusinessRuleError {
   override readonly name = 'InvalidPriceTypeError' as const;
 
   constructor(got: string) {
-    super(`Invalid priceType: "${got}". Must be "regular" or "presale".`);
+    super(`Tipo de precio inválido: "${got}". Debe ser "regular" o "presale".`);
   }
 }
 
@@ -158,7 +158,7 @@ export class CreateSaleUseCase {
 
     for (const item of command.items) {
       if (item.quantity <= 0) {
-        return err(new InvalidQuantityError('Item quantity must be positive'));
+        return err(new InvalidQuantityError('La cantidad del ítem debe ser positiva'));
       }
       if (!VALID_PRICE_TYPES.has(item.priceType)) {
         return err(new InvalidPriceTypeError(item.priceType));

@@ -12,8 +12,10 @@ import { err, ok } from '../../../../shared/domain/Result.js';
 import type { Result } from '../../../../shared/domain/Result.js';
 import { NotFoundError } from '../../../../shared/domain/errors.js';
 import { Sku } from '../../domain/Sku.js';
+import { VariantId } from '../../domain/VariantId.js';
 import type { VariantRepository } from '../../domain/VariantRepository.js';
 import type { ProductRepository } from '../../domain/ProductRepository.js';
+import type { InventoryLotRepository } from '../../domain/InventoryLotRepository.js';
 
 // ── DTOs ─────────────────────────────────────────────────────
 
@@ -31,6 +33,8 @@ export interface ResolvedItem {
   /** Presale price in soles (from Product), null when not set. */
   presalePrice: number | null;
   variantAttributes: Record<string, string>;
+  /** Available stock (sum of open lot remaining quantities). Always ≥ 0. */
+  stock: number;
 }
 
 export interface SearchItemResponse {
@@ -44,7 +48,19 @@ export class SearchItemUseCase {
   constructor(
     private readonly variantRepository: VariantRepository,
     private readonly productRepository: ProductRepository,
+    private readonly lotRepository: InventoryLotRepository,
   ) {}
+
+  /**
+   * Compute available stock for a variant by summing remaining quantities
+   * of all open (non-exhausted) purchase lots.
+   */
+  private async computeStock(variantId: string): Promise<number> {
+    const lots = await this.lotRepository.findByVariantIdOrderedByDate(
+      VariantId.from(variantId),
+    );
+    return lots.reduce((sum, lot) => sum + (lot.remainingQuantity > 0 ? lot.remainingQuantity : 0), 0);
+  }
 
   async execute(
     command: SearchItemCommand,
@@ -60,6 +76,7 @@ export class SearchItemUseCase {
       const variant = await this.variantRepository.findBySku(skuResult.value);
       if (variant) {
         const product = await this.productRepository.findById(variant.productId);
+        const stock = await this.computeStock(variant.id.toString());
         return ok({
           matchType: 'sku',
           items: [
@@ -71,6 +88,7 @@ export class SearchItemUseCase {
               salePrice: product?.salePrice.cents != null ? product.salePrice.cents / 100 : 0,
               presalePrice: product?.presalePrice?.cents != null ? product.presalePrice.cents / 100 : null,
               variantAttributes: { ...variant.attributes },
+              stock,
             },
           ],
         });
@@ -90,6 +108,7 @@ export class SearchItemUseCase {
     for (const product of products) {
       const variants = await this.variantRepository.findByProductId(product.id);
       for (const variant of variants) {
+        const stock = await this.computeStock(variant.id.toString());
         items.push({
           productId: product.id.toString(),
           productName: product.name,
@@ -98,6 +117,7 @@ export class SearchItemUseCase {
           salePrice: product.salePrice.cents / 100,
           presalePrice: product.presalePrice?.cents != null ? product.presalePrice.cents / 100 : null,
           variantAttributes: { ...variant.attributes },
+          stock,
         });
       }
     }

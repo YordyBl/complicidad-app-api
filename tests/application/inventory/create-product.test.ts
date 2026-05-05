@@ -218,7 +218,7 @@ describe('CreateProductUseCase', () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error).toBeInstanceOf(SkuAlreadyExistsError);
-      expect(result.error.message).toContain('already exists');
+      expect(result.error.message).toContain('ya existe');
     });
 
     it('rejects when existing variant has same SKU regardless of input casing', async () => {

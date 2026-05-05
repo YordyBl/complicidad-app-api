@@ -426,7 +426,7 @@ describe('CreateSaleUseCase', () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error).toBeInstanceOf(BusinessRuleError);
-      expect(result.error.message).toContain('Insufficient stock');
+      expect(result.error.message).toContain('Stock insuficiente');
     });
 
     it('rejects sale when variant has no lots at all', async () => {
@@ -440,7 +440,7 @@ describe('CreateSaleUseCase', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.error.message).toContain('Insufficient stock');
+      expect(result.error.message).toContain('Stock insuficiente');
     });
   });
 
@@ -569,7 +569,7 @@ describe('CreateSaleUseCase', () => {
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.error.message).toContain('Insufficient stock');
+      expect(result.error.message).toContain('Stock insuficiente');
 
       // Verify nothing was saved
       expect(saleRepo.sales.size).toBe(0);

@@ -37,14 +37,14 @@ function corsMiddleware(
     if (isAllowed) {
       res.status(204).end();
     } else {
-      res.status(403).json({ error: 'CORS', message: 'Origin not allowed' });
+      res.status(403).json({ error: 'CORS', message: 'Origen no permitido' });
     }
     return;
   }
 
   if (!isAllowed && env.isProd()) {
     // In production, reject disallowed cross-origin requests with a body
-    res.status(403).json({ error: 'CORS', message: 'Origin not allowed' });
+    res.status(403).json({ error: 'CORS', message: 'Origen no permitido' });
     return;
   }
 

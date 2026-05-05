@@ -22,11 +22,11 @@ export class InventoryController {
       req.body as Record<string, unknown>;
 
     if (typeof variantId !== 'string') {
-      res.status(400).json({ error: 'ValidationError', message: 'variantId is required and must be a string' });
+      res.status(400).json({ error: 'ValidationError', message: 'variantId es obligatorio y debe ser un string' });
       return;
     }
     if (typeof quantity !== 'number' || typeof unitCost !== 'number') {
-      res.status(400).json({ error: 'ValidationError', message: 'quantity and unitCost must be numbers' });
+      res.status(400).json({ error: 'ValidationError', message: 'quantity y unitCost deben ser números' });
       return;
     }
 

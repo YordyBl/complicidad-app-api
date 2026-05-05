@@ -28,7 +28,7 @@ export function createAuthModule(manager?: EntityManager): Router {
     router.all('*', (_req, res) => {
       res.status(503).json({
         error: 'ServiceUnavailable',
-        message: 'Database not connected — auth endpoints unavailable',
+        message: 'Base de datos no conectada — endpoints de autenticación no disponibles',
       });
     });
     return router;

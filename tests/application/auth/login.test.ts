@@ -158,7 +158,7 @@ describe('LoginUseCase', () => {
       if (result.ok) return;
 
       expect(result.error).toBeInstanceOf(AuthenticationError);
-      expect(result.error.message).toBe('Invalid credentials');
+      expect(result.error.message).toBe('Credenciales inválidas');
     });
   });
 
@@ -184,7 +184,7 @@ describe('LoginUseCase', () => {
       if (result.ok) return;
 
       expect(result.error).toBeInstanceOf(AuthenticationError);
-      expect(result.error.message).toBe('Invalid credentials');
+      expect(result.error.message).toBe('Credenciales inválidas');
     });
   });
 
@@ -210,7 +210,7 @@ describe('LoginUseCase', () => {
       if (result.ok) return;
 
       expect(result.error).toBeInstanceOf(AuthenticationError);
-      expect(result.error.message).toBe('Invalid credentials');
+      expect(result.error.message).toBe('Credenciales inválidas');
     });
   });
 

@@ -21,7 +21,7 @@ export class CashClosing {
     private readonly _createdAt: Date,
   ) {
     if (!Number.isInteger(_liquidityCents)) {
-      throw new BusinessRuleError('Liquidity cents must be an integer');
+      throw new BusinessRuleError('Los centavos de liquidez deben ser un número entero');
     }
     Object.freeze(this);
   }

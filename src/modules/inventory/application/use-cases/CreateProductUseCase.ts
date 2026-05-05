@@ -50,7 +50,7 @@ export class SkuAlreadyExistsError extends BusinessRuleError {
   override readonly name = 'SkuAlreadyExistsError' as const;
 
   constructor(sku: string) {
-    super(`SKU "${sku}" already exists`);
+    super(`El SKU "${sku}" ya existe`);
   }
 }
 
@@ -58,7 +58,7 @@ export class EmptySizesError extends BusinessRuleError {
   override readonly name = 'EmptySizesError' as const;
 
   constructor() {
-    super('At least one size is required');
+    super('Se requiere al menos un talle');
   }
 }
 
@@ -66,7 +66,7 @@ export class InvalidBaseSkuError extends BusinessRuleError {
   override readonly name = 'InvalidBaseSkuError' as const;
 
   constructor() {
-    super('Base SKU is required and must be a non-empty string');
+    super('El SKU base es obligatorio y debe ser un string no vacío');
   }
 }
 
@@ -74,7 +74,7 @@ export class PerSizePricingError extends BusinessRuleError {
   override readonly name = 'PerSizePricingError' as const;
 
   constructor() {
-    super('Per-size sale or presale pricing is not supported. Prices belong to the product, not individual sizes.');
+    super('El precio por talle no está soportado. Los precios pertenecen al producto, no a talles individuales.');
   }
 }
 

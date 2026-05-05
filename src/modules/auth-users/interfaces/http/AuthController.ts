@@ -33,7 +33,7 @@ export class AuthController {
     if (!email || !password) {
       const body: LoginErrorDto = {
         error: 'ValidationError',
-        message: 'Email and password are required',
+        message: 'Email y contraseña son obligatorios',
       };
       res.status(400).json(body);
       return;
@@ -42,7 +42,7 @@ export class AuthController {
     if (typeof email !== 'string' || typeof password !== 'string') {
       const body: LoginErrorDto = {
         error: 'ValidationError',
-        message: 'Email and password must be strings',
+        message: 'Email y contraseña deben ser strings',
       };
       res.status(400).json(body);
       return;
@@ -52,7 +52,7 @@ export class AuthController {
     if (trimmedEmail.length === 0 || password.length === 0) {
       const body: LoginErrorDto = {
         error: 'ValidationError',
-        message: 'Email and password must not be empty',
+        message: 'Email y contraseña no pueden estar vacíos',
       };
       res.status(400).json(body);
       return;
@@ -94,7 +94,7 @@ export class AuthController {
     if (!email || !password) {
       const body: RegisterErrorDto = {
         error: 'ValidationError',
-        message: 'Email and password are required',
+        message: 'Email y contraseña son obligatorios',
       };
       res.status(400).json(body);
       return;
@@ -103,7 +103,7 @@ export class AuthController {
     if (typeof email !== 'string' || typeof password !== 'string') {
       const body: RegisterErrorDto = {
         error: 'ValidationError',
-        message: 'Email and password must be strings',
+        message: 'Email y contraseña deben ser strings',
       };
       res.status(400).json(body);
       return;
@@ -112,7 +112,7 @@ export class AuthController {
     if (role !== undefined && typeof role !== 'string') {
       const body: RegisterErrorDto = {
         error: 'ValidationError',
-        message: 'Role must be a string',
+        message: 'El rol debe ser un string',
       };
       res.status(400).json(body);
       return;

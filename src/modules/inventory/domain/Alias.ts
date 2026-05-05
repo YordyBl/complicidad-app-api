@@ -24,10 +24,10 @@ export class Alias {
   static from(value: string): Result<Alias, AliasError> {
     const trimmed = value.trim().toLowerCase();
     if (trimmed.length === 0) {
-      return err(new AliasError('Alias cannot be empty'));
+      return err(new AliasError('El alias no puede estar vacío'));
     }
     if (trimmed.length > ALIAS_MAX_LENGTH) {
-      return err(new AliasError(`Alias cannot exceed ${String(ALIAS_MAX_LENGTH)} characters`));
+      return err(new AliasError(`El alias no puede superar los ${String(ALIAS_MAX_LENGTH)} caracteres`));
     }
     return ok(new Alias(trimmed));
   }

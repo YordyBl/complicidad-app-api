@@ -16,7 +16,7 @@ export class NotFoundError extends DomainError {
   override readonly name = 'NotFoundError';
 
   constructor(entityName: string, id: string) {
-    super(`${entityName} with id "${id}" not found`);
+    super(`${entityName} con id "${id}" no encontrado`);
   }
 }
 
@@ -37,7 +37,7 @@ export class BusinessRuleError extends DomainError {
   override readonly name: string;
 
   constructor(message?: string) {
-    super(message ?? 'Business rule violation');
+    super(message ?? 'Violación de regla de negocio');
     this.name = 'BusinessRuleError';
   }
 }

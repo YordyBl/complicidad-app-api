@@ -48,7 +48,7 @@ export class ManualCashCloseUseCase {
     } catch (error) {
       return err(
         new BusinessRuleError(
-          `Failed to save cash closing: ${error instanceof Error ? error.message : String(error)}`,
+          `Error al guardar el cierre de caja: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }

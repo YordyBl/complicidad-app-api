@@ -19,7 +19,7 @@ export class Money {
 
   private constructor(cents: number) {
     if (!Number.isInteger(cents)) {
-      throw new MoneyError(`Money must be constructed with integer cents, got ${String(cents)}`);
+      throw new MoneyError(`Money debe ser construido con centavos enteros, se recibió ${String(cents)}`);
     }
     this._cents = cents;
 
@@ -45,9 +45,9 @@ export class Money {
     const trimmed = decimal.trim();
     const match = /^-?\d+(\.\d{1,2})?$/.exec(trimmed);
     if (!match) {
-      throw new MoneyError(
-        `Invalid decimal format: "${decimal}". Expected a number with up to 2 decimal places.`,
-      );
+throw new MoneyError(
+          `Formato decimal inválido: "${decimal}". Se esperaba un número con hasta 2 decimales.`,
+        );
     }
     const [whole, fraction] = trimmed.split('.');
     const cents =
@@ -102,7 +102,7 @@ export class Money {
    */
   divide(divisor: number): Money {
     if (divisor === 0) {
-      throw new MoneyError('Cannot divide Money by zero');
+      throw new MoneyError('No se puede dividir Money por cero');
     }
     const result = Math.round(this._cents / divisor);
     return new Money(result);

@@ -37,7 +37,7 @@ export function createSalesModule(manager?: EntityManager, uow?: UnitOfWork): Ro
     router.all('*', (_req, res) => {
       res.status(503).json({
         error: 'ServiceUnavailable',
-        message: 'Database not connected — sales endpoints unavailable',
+        message: 'Base de datos no conectada — endpoints de ventas no disponibles',
       });
     });
     return router;

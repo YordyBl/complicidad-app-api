@@ -38,7 +38,7 @@ export class Customer {
     private _updatedAt: Date,
   ) {
     if (!_name || _name.trim().length === 0) {
-      throw new CustomerNameError('Customer name is required');
+      throw new CustomerNameError('El nombre del cliente es obligatorio');
     }
   }
 
@@ -101,7 +101,7 @@ export class Customer {
     updatedAt: Date,
   ): void {
     if (!name || name.trim().length === 0) {
-      throw new CustomerNameError('Customer name is required');
+      throw new CustomerNameError('El nombre del cliente es obligatorio');
     }
     this._name = name.trim();
     this._email = email;

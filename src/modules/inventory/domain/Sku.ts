@@ -31,10 +31,10 @@ export class Sku {
   static from(value: string): Result<Sku, SkuError> {
     const trimmed = value.trim();
     if (trimmed.length === 0) {
-      return err(new SkuError('SKU cannot be empty'));
+      return err(new SkuError('El SKU no puede estar vacío'));
     }
     if (trimmed.length > SKU_MAX_LENGTH) {
-      return err(new SkuError(`SKU cannot exceed ${String(SKU_MAX_LENGTH)} characters`));
+      return err(new SkuError(`El SKU no puede superar los ${String(SKU_MAX_LENGTH)} caracteres`));
     }
     return ok(new Sku(trimmed.toLowerCase()));
   }

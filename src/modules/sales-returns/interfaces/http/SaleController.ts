@@ -39,15 +39,15 @@ export class SaleController {
     const { customerId, channelReference, items } = req.body as Record<string, unknown>;
 
     if (typeof customerId !== 'string') {
-      res.status(400).json({ error: 'ValidationError', message: 'customerId is required and must be a string' });
+      res.status(400).json({ error: 'ValidationError', message: 'customerId es obligatorio y debe ser un string' });
       return;
     }
     if (typeof channelReference !== 'string') {
-      res.status(400).json({ error: 'ValidationError', message: 'channelReference is required and must be a string' });
+      res.status(400).json({ error: 'ValidationError', message: 'channelReference es obligatorio y debe ser un string' });
       return;
     }
     if (!Array.isArray(items) || items.length === 0) {
-      res.status(400).json({ error: 'ValidationError', message: 'items must be a non-empty array' });
+      res.status(400).json({ error: 'ValidationError', message: 'items debe ser un array no vacío' });
       return;
     }
 
@@ -59,14 +59,14 @@ export class SaleController {
       if (!item || typeof item.variantId !== 'string' || typeof item.quantity !== 'number' || typeof item.priceType !== 'string') {
         res.status(400).json({
           error: 'ValidationError',
-          message: `items[${String(i)}] must have variantId (string), quantity (number), and priceType (string: "regular" | "presale")`,
+          message: `items[${String(i)}] debe tener variantId (string), quantity (number) y priceType (string: "regular" | "presale")`,
         });
         return;
       }
       if (!validPriceTypes.has(item.priceType)) {
         res.status(400).json({
           error: 'ValidationError',
-          message: `items[${String(i)}].priceType must be "regular" or "presale", got "${item.priceType}"`,
+          message: `items[${String(i)}].priceType debe ser "regular" o "presale", se recibió "${item.priceType}"`,
         });
         return;
       }
@@ -93,7 +93,7 @@ export class SaleController {
   async cancel(req: Request, res: Response): Promise<void> {
     const id = req.params.id as string | undefined;
     if (!id) {
-      res.status(400).json({ error: 'ValidationError', message: 'Sale ID is required' });
+      res.status(400).json({ error: 'ValidationError', message: 'El ID de venta es obligatorio' });
       return;
     }
 
@@ -114,7 +114,7 @@ export class SaleController {
   async returnSale(req: Request, res: Response): Promise<void> {
     const id = req.params.id as string | undefined;
     if (!id) {
-      res.status(400).json({ error: 'ValidationError', message: 'Sale ID is required' });
+      res.status(400).json({ error: 'ValidationError', message: 'El ID de venta es obligatorio' });
       return;
     }
 
@@ -136,7 +136,7 @@ export class SaleController {
     if (!this.listSalesUseCase) {
       res.status(503).json({
         error: 'ServiceUnavailable',
-        message: 'Sales listing not available',
+        message: 'El listado de ventas no está disponible',
       });
       return;
     }
@@ -147,7 +147,7 @@ export class SaleController {
     if (query.status && !VALID_SALE_STATUSES.has(query.status)) {
       res.status(400).json({
         error: 'ValidationError',
-        message: `Invalid status "${query.status}". Must be one of: ACTIVE, CANCELLED, RETURNED`,
+        message: `Estado inválido "${query.status}". Debe ser uno de: ACTIVE, CANCELLED, RETURNED`,
       });
       return;
     }
@@ -156,7 +156,7 @@ export class SaleController {
     if (query.sortOrder && query.sortOrder !== 'asc' && query.sortOrder !== 'desc') {
       res.status(400).json({
         error: 'ValidationError',
-        message: `Invalid sortOrder "${query.sortOrder}". Must be "asc" or "desc"`,
+        message: `sortOrder inválido "${query.sortOrder}". Debe ser "asc" o "desc"`,
       });
       return;
     }
@@ -182,14 +182,14 @@ export class SaleController {
     if (!this.getSaleDetailUseCase) {
       res.status(503).json({
         error: 'ServiceUnavailable',
-        message: 'Sale detail not available',
+        message: 'El detalle de venta no está disponible',
       });
       return;
     }
 
     const id = req.params.id as string | undefined;
     if (!id) {
-      res.status(400).json({ error: 'ValidationError', message: 'Sale ID is required' });
+      res.status(400).json({ error: 'ValidationError', message: 'El ID de venta es obligatorio' });
       return;
     }
 
@@ -197,7 +197,7 @@ export class SaleController {
     if (!UUID_REGEX.test(id)) {
       res.status(400).json({
         error: 'ValidationError',
-        message: `Invalid sale ID format: "${id}". Must be a valid UUID.`,
+        message: `Formato de ID de venta inválido: "${id}". Debe ser un UUID válido.`,
       });
       return;
     }

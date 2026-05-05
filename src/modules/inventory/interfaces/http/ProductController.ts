@@ -31,19 +31,19 @@ export class ProductController {
       req.body as Record<string, unknown>;
 
     if (typeof name !== 'string') {
-      res.status(400).json({ error: 'ValidationError', message: 'name is required and must be a string' });
+      res.status(400).json({ error: 'ValidationError', message: 'name es obligatorio y debe ser un string' });
       return;
     }
     if (typeof baseSku !== 'string' || baseSku.trim().length === 0) {
-      res.status(400).json({ error: 'ValidationError', message: 'baseSku is required and must be a non-empty string' });
+      res.status(400).json({ error: 'ValidationError', message: 'baseSku es obligatorio y debe ser un string no vacío' });
       return;
     }
     if (typeof salePrice !== 'number' || salePrice <= 0) {
-      res.status(400).json({ error: 'ValidationError', message: 'salePrice is required and must be a positive number (soles)' });
+      res.status(400).json({ error: 'ValidationError', message: 'salePrice es obligatorio y debe ser un número positivo (soles)' });
       return;
     }
     if (!Array.isArray(sizes) || sizes.length === 0) {
-      res.status(400).json({ error: 'ValidationError', message: 'sizes is required and must be a non-empty array of strings' });
+      res.status(400).json({ error: 'ValidationError', message: 'sizes es obligatorio y debe ser un array no vacío de strings' });
       return;
     }
 
@@ -71,13 +71,13 @@ export class ProductController {
    */
   async search(req: Request, res: Response): Promise<void> {
     if (!this.searchItemUseCase) {
-      res.status(503).json({ error: 'ServiceUnavailable', message: 'Search not available' });
+      res.status(503).json({ error: 'ServiceUnavailable', message: 'La búsqueda no está disponible' });
       return;
     }
 
     const term = typeof req.query.term === 'string' ? req.query.term.trim() : '';
     if (!term) {
-      res.status(400).json({ error: 'ValidationError', message: 'term query parameter is required' });
+      res.status(400).json({ error: 'ValidationError', message: 'El parámetro term es obligatorio' });
       return;
     }
 
@@ -100,7 +100,7 @@ export class ProductController {
    */
   async list(req: Request, res: Response): Promise<void> {
     if (!this.listProductsUseCase) {
-      res.status(503).json({ error: 'ServiceUnavailable', message: 'Product listing not available' });
+      res.status(503).json({ error: 'ServiceUnavailable', message: 'El listado de productos no está disponible' });
       return;
     }
 
@@ -113,7 +113,7 @@ export class ProductController {
       if (!Number.isInteger(pageNum) || pageNum < 1) {
         res.status(400).json({
           error: 'ValidationError',
-          message: 'page must be a positive integer',
+          message: 'page debe ser un entero positivo',
         });
         return;
       }
@@ -125,7 +125,7 @@ export class ProductController {
       if (!Number.isInteger(psNum) || psNum < 1 || psNum > 100) {
         res.status(400).json({
           error: 'ValidationError',
-          message: 'pageSize must be an integer between 1 and 100',
+          message: 'pageSize debe ser un entero entre 1 y 100',
         });
         return;
       }
@@ -135,7 +135,7 @@ export class ProductController {
     if (search !== undefined && search.length > 100) {
       res.status(400).json({
         error: 'ValidationError',
-        message: 'search must be at most 100 characters',
+        message: 'search debe tener como máximo 100 caracteres',
       });
       return;
     }
@@ -144,7 +144,7 @@ export class ProductController {
     if (status !== undefined && !VALID_STATUSES.has(status)) {
       res.status(400).json({
         error: 'ValidationError',
-        message: 'status must be one of: active, inactive, all',
+        message: 'status debe ser uno de: active, inactive, all',
       });
       return;
     }
@@ -153,7 +153,7 @@ export class ProductController {
     if (sortBy !== undefined && !VALID_SORT_BY.has(sortBy)) {
       res.status(400).json({
         error: 'ValidationError',
-        message: 'sortBy must be one of: name, createdAt, updatedAt',
+        message: 'sortBy debe ser uno de: name, createdAt, updatedAt',
       });
       return;
     }
@@ -162,7 +162,7 @@ export class ProductController {
     if (sortOrder !== undefined && !VALID_SORT_ORDER.has(sortOrder)) {
       res.status(400).json({
         error: 'ValidationError',
-        message: 'sortOrder must be one of: asc, desc',
+        message: 'sortOrder debe ser uno de: asc, desc',
       });
       return;
     }

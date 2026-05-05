@@ -39,7 +39,7 @@ export class AuthenticationError extends BusinessRuleError {
   override readonly name = 'AuthenticationError' as const;
 
   constructor() {
-    super('Invalid credentials');
+    super('Credenciales inválidas');
   }
 }
 

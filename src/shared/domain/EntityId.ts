@@ -17,7 +17,7 @@ export abstract class EntityId {
 
   protected constructor(value: string) {
     if (!value || value.trim().length === 0) {
-      throw new EntityIdError('EntityId cannot be empty');
+      throw new EntityIdError('EntityId no puede estar vacío');
     }
     this._value = value.trim();
 

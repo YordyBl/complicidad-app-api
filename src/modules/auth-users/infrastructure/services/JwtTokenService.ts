@@ -28,7 +28,7 @@ export class JwtTokenService implements TokenService {
         options,
         (err, token) => {
           if (err) reject(err);
-          else if (!token) reject(new Error('JWT sign returned empty token'));
+          else if (!token) reject(new Error('JWT sign devolvió un token vacío'));
           else resolve(token);
         },
       );

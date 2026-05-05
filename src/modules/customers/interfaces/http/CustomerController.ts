@@ -31,7 +31,7 @@ export class CustomerController {
 
     // Basic type validation
     if (typeof name !== 'string') {
-      res.status(400).json({ error: 'ValidationError', message: 'name is required and must be a string' });
+      res.status(400).json({ error: 'ValidationError', message: 'name es obligatorio y debe ser un string' });
       return;
     }
 
@@ -67,7 +67,7 @@ export class CustomerController {
   async getById(req: Request, res: Response): Promise<void> {
     const id = req.params.id as string | undefined;
     if (!id) {
-      res.status(400).json({ error: 'ValidationError', message: 'Customer ID is required' });
+      res.status(400).json({ error: 'ValidationError', message: 'El ID de cliente es obligatorio' });
       return;
     }
 
@@ -91,13 +91,13 @@ export class CustomerController {
   async update(req: Request, res: Response): Promise<void> {
     const id = req.params.id as string | undefined;
     if (!id) {
-      res.status(400).json({ error: 'ValidationError', message: 'Customer ID is required' });
+      res.status(400).json({ error: 'ValidationError', message: 'El ID de cliente es obligatorio' });
       return;
     }
     const { name, email, phone, alias, address, googleMapsUrl, notes } = req.body as Record<string, unknown>;
 
     if (typeof name !== 'string') {
-      res.status(400).json({ error: 'ValidationError', message: 'name is required and must be a string' });
+      res.status(400).json({ error: 'ValidationError', message: 'name es obligatorio y debe ser un string' });
       return;
     }
 
@@ -130,7 +130,7 @@ export class CustomerController {
   async history(req: Request, res: Response): Promise<void> {
     const id = req.params.id as string | undefined;
     if (!id) {
-      res.status(400).json({ error: 'ValidationError', message: 'Customer ID is required' });
+      res.status(400).json({ error: 'ValidationError', message: 'El ID de cliente es obligatorio' });
       return;
     }
 

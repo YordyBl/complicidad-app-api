@@ -50,13 +50,13 @@ export class PurchaseLot {
     private _supplierId: SupplierId | null,
   ) {
     if (_remainingQuantity < 0) {
-      throw new LotConsumptionError('Remaining quantity cannot be negative');
+      throw new LotConsumptionError('La cantidad restante no puede ser negativa');
     }
     if (_remainingQuantity > _purchasedQuantity) {
-      throw new LotConsumptionError('Remaining quantity cannot exceed purchased quantity');
+      throw new LotConsumptionError('La cantidad restante no puede superar la cantidad comprada');
     }
     if (_purchasedQuantity <= 0) {
-      throw new LotConsumptionError('Purchased quantity must be positive');
+      throw new LotConsumptionError('La cantidad comprada debe ser positiva');
     }
   }
 
@@ -115,14 +115,14 @@ export class PurchaseLot {
    */
   consume(quantity: number): Result<LotConsumption, LotConsumptionError> {
     if (quantity <= 0) {
-      return err(new LotConsumptionError('Consumption quantity must be positive'));
+      return err(new LotConsumptionError('La cantidad a consumir debe ser positiva'));
     }
     if (quantity > this._remainingQuantity) {
-      return err(
-        new LotConsumptionError(
-          `Cannot consume ${String(quantity)} units from lot ${this._id.toString()}: only ${String(this._remainingQuantity)} remaining`,
-        ),
-      );
+return err(
+          new LotConsumptionError(
+            `No se pueden consumir ${String(quantity)} unidades del lote ${this._id.toString()}: quedan ${String(this._remainingQuantity)} restantes`,
+          ),
+        );
     }
 
     this._remainingQuantity -= quantity;
@@ -143,11 +143,11 @@ export class PurchaseLot {
    */
   restore(quantity: number): void {
     if (quantity <= 0) {
-      throw new LotConsumptionError('Restore quantity must be positive');
+      throw new LotConsumptionError('La cantidad a restaurar debe ser positiva');
     }
     if (this._remainingQuantity + quantity > this._purchasedQuantity) {
       throw new LotConsumptionError(
-        `Cannot restore ${String(quantity)} units to lot ${this._id.toString()}: would exceed purchased quantity of ${String(this._purchasedQuantity)}`,
+        `No se pueden restaurar ${String(quantity)} unidades al lote ${this._id.toString()}: superaría la cantidad comprada de ${String(this._purchasedQuantity)}`,
       );
     }
     this._remainingQuantity += quantity;

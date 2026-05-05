@@ -13,12 +13,18 @@ import { describe, it, expect } from 'vitest';
 import { SearchItemUseCase } from '../../../src/modules/inventory/application/use-cases/SearchItemUseCase.js';
 import type { ProductRepository } from '../../../src/modules/inventory/domain/ProductRepository.js';
 import type { VariantRepository } from '../../../src/modules/inventory/domain/VariantRepository.js';
+import type { InventoryLotRepository } from '../../../src/modules/inventory/domain/InventoryLotRepository.js';
 import type { Variant } from '../../../src/modules/inventory/domain/Variant.js';
 import { Variant as VariantEntity } from '../../../src/modules/inventory/domain/Variant.js';
 import type { Product } from '../../../src/modules/inventory/domain/Product.js';
 import { Product as ProductEntity } from '../../../src/modules/inventory/domain/Product.js';
+import type { PurchaseLot } from '../../../src/modules/inventory/domain/PurchaseLot.js';
 import { ProductId } from '../../../src/modules/inventory/domain/ProductId.js';
 import { VariantId } from '../../../src/modules/inventory/domain/VariantId.js';
+import { PurchaseLotId } from '../../../src/modules/inventory/domain/PurchaseLotId.js';
+import { PurchaseId } from '../../../src/modules/inventory/domain/PurchaseId.js';
+import { SupplierId } from '../../../src/modules/inventory/domain/SupplierId.js';
+import { PurchaseLot as PurchaseLotEntity } from '../../../src/modules/inventory/domain/PurchaseLot.js';
 import { Sku } from '../../../src/modules/inventory/domain/Sku.js';
 import { Alias } from '../../../src/modules/inventory/domain/Alias.js';
 import { Money } from '../../../src/shared/domain/Money.js';
@@ -89,6 +95,32 @@ class FakeProductRepository implements ProductRepository {
   }
 }
 
+/** Simple fake that returns configurable lots per variant. Defaults to empty (= stock 0). */
+class FakeInventoryLotRepository implements InventoryLotRepository {
+  private lotsByVariant = new Map<string, PurchaseLot[]>();
+
+  /** Set lots for a variant (used by tests to configure stock). */
+  setLotsForVariant(variantId: string, lots: PurchaseLot[]): void {
+    this.lotsByVariant.set(variantId, lots);
+  }
+
+  async findById(): Promise<PurchaseLot | null> {
+    return null;
+  }
+
+  async findByIds(): Promise<PurchaseLot[]> {
+    return [];
+  }
+
+  async findByVariantIdOrderedByDate(variantId: VariantId): Promise<PurchaseLot[]> {
+    return this.lotsByVariant.get(variantId.toString()) ?? [];
+  }
+
+  async save(): Promise<void> {}
+  async saveMany(): Promise<void> {}
+  async delete(): Promise<void> {}
+}
+
 // ── Helpers ──────────────────────────────────────────────────
 
 function makeProduct(
@@ -147,9 +179,11 @@ describe('SearchItemUseCase', () => {
     useCase: SearchItemUseCase;
     variantRepo: FakeVariantRepository;
     productRepo: FakeProductRepository;
+    lotRepo: FakeInventoryLotRepository;
   } {
     const variantRepo = new FakeVariantRepository();
     const productRepo = new FakeProductRepository();
+    const lotRepo = new FakeInventoryLotRepository();
 
     // Product A — cola-based drink with aliases
     const productA = makeProduct(PRODUCT_A_ID, 'Cola Drink 500ml', [
@@ -181,8 +215,8 @@ describe('SearchItemUseCase', () => {
       makeVariant(VARIANT_B1_ID, PRODUCT_B_ID, 'lemon-350ml'),
     );
 
-    const useCase = new SearchItemUseCase(variantRepo, productRepo);
-    return { useCase, variantRepo, productRepo };
+    const useCase = new SearchItemUseCase(variantRepo, productRepo, lotRepo);
+    return { useCase, variantRepo, productRepo, lotRepo };
   }
 
   it('resolves variant by exact SKU match', async () => {
@@ -268,5 +302,91 @@ describe('SearchItemUseCase', () => {
     const result = await useCase.execute({ term: '  ' });
 
     expect(result.ok).toBe(false);
+  });
+
+  // ── Stock aggregation tests ──────────────────────────────────
+
+  function makeLot(
+    id: string,
+    variantId: string,
+    purchasedQuantity: number,
+    remainingQuantity: number,
+  ): PurchaseLotEntity {
+    return new PurchaseLotEntity(
+      PurchaseLotId.from(id),
+      VariantId.from(variantId),
+      PurchaseId.from('purchase-1'),
+      purchasedQuantity,
+      remainingQuantity,
+      Money.fromCents(1000),
+      new Date('2026-01-01'),
+      SupplierId.from('supplier-1'),
+    );
+  }
+
+  it('includes stock from open lots on SKU match', async () => {
+    const { useCase, lotRepo } = createUseCase();
+
+    // VARIANT_A1 has 2 open lots: 5 + 3 = 8 stock
+    lotRepo.setLotsForVariant(VARIANT_A1_ID, [
+      makeLot('lot-a1-1', VARIANT_A1_ID, 5, 5),
+      makeLot('lot-a1-2', VARIANT_A1_ID, 10, 3),
+    ]);
+
+    const result = await useCase.execute({ term: 'cola-500ml' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.items[0]!.stock).toBe(8);
+  });
+
+  it('returns stock 0 when variant has no lots', async () => {
+    const { useCase } = createUseCase();
+
+    const result = await useCase.execute({ term: 'cola-500ml' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.items[0]!.stock).toBe(0);
+  });
+
+  it('excludes exhausted lots from stock calculation', async () => {
+    const { useCase, lotRepo } = createUseCase();
+
+    // VARIANT_A1 has 1 open lot (5) and 1 exhausted lot (0 remaining)
+    lotRepo.setLotsForVariant(VARIANT_A1_ID, [
+      makeLot('lot-a1-1', VARIANT_A1_ID, 5, 5),
+      makeLot('lot-a1-2', VARIANT_A1_ID, 10, 0),
+    ]);
+
+    const result = await useCase.execute({ term: 'cola-500ml' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.items[0]!.stock).toBe(5);
+  });
+
+  it('includes stock on alias match', async () => {
+    const { useCase, lotRepo } = createUseCase();
+
+    // Both variants of Product A have stock
+    lotRepo.setLotsForVariant(VARIANT_A1_ID, [
+      makeLot('lot-a1-1', VARIANT_A1_ID, 10, 7),
+    ]);
+    lotRepo.setLotsForVariant(VARIANT_A2_ID, [
+      makeLot('lot-a2-1', VARIANT_A2_ID, 5, 2),
+    ]);
+
+    const result = await useCase.execute({ term: 'coke' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.matchType).toBe('alias');
+    expect(result.value.items).toHaveLength(2);
+
+    const a1Item = result.value.items.find((i) => i.variantId === VARIANT_A1_ID);
+    const a2Item = result.value.items.find((i) => i.variantId === VARIANT_A2_ID);
+    expect(a1Item!.stock).toBe(7);
+    expect(a2Item!.stock).toBe(2);
   });
 });

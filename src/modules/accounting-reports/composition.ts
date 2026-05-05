@@ -32,7 +32,7 @@ export function createAccountingModule(manager?: EntityManager): Router {
     router.all('*', (_req, res) => {
       res.status(503).json({
         error: 'ServiceUnavailable',
-        message: 'Database not connected — report endpoints unavailable',
+        message: 'Base de datos no conectada — endpoints de reportes no disponibles',
       });
     });
     return router;

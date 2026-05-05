@@ -24,10 +24,10 @@ export class SaleLine {
     private readonly _consumptions: LotConsumptionRecord[],
   ) {
     if (_quantity <= 0) {
-      throw new BusinessRuleError('Quantity must be positive');
+      throw new BusinessRuleError('La cantidad debe ser positiva');
     }
     if (_unitPrice.cents < 0) {
-      throw new BusinessRuleError('Unit price cannot be negative');
+      throw new BusinessRuleError('El precio unitario no puede ser negativo');
     }
   }
 

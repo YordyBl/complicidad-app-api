@@ -35,7 +35,7 @@ export class InsufficientStockError extends BusinessRuleError {
   override readonly name = 'InsufficientStockError' as const;
 
   constructor(requested: number, available: number) {
-    super(`Insufficient stock: requested ${String(requested)} units, but only ${String(available)} available`);
+    super(`Stock insuficiente: se solicitaron ${String(requested)} unidades, pero solo hay ${String(available)} disponibles`);
   }
 }
 

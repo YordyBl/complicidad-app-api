@@ -236,7 +236,7 @@ describe('RegisterUserUseCase', () => {
       if (result.ok) return;
 
       expect(result.error).toBeInstanceOf(InputValidationError);
-      expect(result.error.message).toContain('Email');
+      expect(result.error.message).toContain('email');
     });
 
     it('should reject empty email', async () => {
@@ -249,7 +249,7 @@ describe('RegisterUserUseCase', () => {
       if (result.ok) return;
 
       expect(result.error).toBeInstanceOf(InputValidationError);
-      expect(result.error.message).toContain('Email');
+      expect(result.error.message).toContain('email');
     });
 
     it('should reject email without @', async () => {
@@ -304,7 +304,7 @@ describe('RegisterUserUseCase', () => {
       if (result.ok) return;
 
       expect(result.error).toBeInstanceOf(InputValidationError);
-      expect(result.error.message).toContain('Password');
+      expect(result.error.message).toContain('contraseña');
     });
 
     it('should reject password shorter than 8 characters', async () => {
@@ -350,7 +350,7 @@ describe('RegisterUserUseCase', () => {
       if (result.ok) return;
 
       expect(result.error).toBeInstanceOf(InputValidationError);
-      expect(result.error.message).toContain('role');
+      expect(result.error.message).toContain('Rol');
     });
   });
 
