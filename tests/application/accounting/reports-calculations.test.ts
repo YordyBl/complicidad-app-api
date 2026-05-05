@@ -433,3 +433,65 @@ describe('ManualCashCloseUseCase', () => {
     expect(result.value.liquidityCents).toBe(-30000);
   });
 });
+
+// ── Consistency across reports ────────────────────────────
+
+describe('Cross-report consistency', () => {
+  let repo: FakeReportReadRepository;
+  let liquidity: GetLiquidityUseCase;
+  let stockInvestment: GetStockInvestmentUseCase;
+  let operatingCapital: GetOperatingCapitalUseCase;
+  let cashClose: ManualCashCloseUseCase;
+
+  beforeEach(() => {
+    repo = new FakeReportReadRepository();
+    liquidity = new GetLiquidityUseCase(repo);
+    stockInvestment = new GetStockInvestmentUseCase(repo);
+    operatingCapital = new GetOperatingCapitalUseCase(repo);
+    cashClose = new ManualCashCloseUseCase(repo, new FakeCashClosingRepository());
+  });
+
+  it('all reports reflect the same normalized source values', async () => {
+    repo.liquidityCentsValue = 150000;
+    repo.stockInvestmentCentsValue = 350000;
+
+    const [liq, stock, cap] = await Promise.all([
+      liquidity.execute(),
+      stockInvestment.execute(),
+      operatingCapital.execute(),
+    ]);
+
+    expect(liq.liquidityCents).toBe(150000);
+    expect(stock.stockInvestmentCents).toBe(350000);
+    expect(cap.liquidityCents).toBe(150000);
+    expect(cap.stockInvestmentCents).toBe(350000);
+    expect(cap.operatingCapitalCents).toBe(500000);
+  });
+
+  it('cash closing snapshot matches liquidity at close time', async () => {
+    repo.liquidityCentsValue = 275000;
+
+    const closeResult = await cashClose.execute({ notes: 'Consistency check' });
+
+    expect(closeResult.ok).toBe(true);
+    if (!closeResult.ok) return;
+
+    // The closing must record the exact same liquidity that the use case would return
+    const liq = await liquidity.execute();
+    expect(closeResult.value.liquidityCents).toBe(liq.liquidityCents);
+  });
+
+  it('preserves negative values consistently across reports', async () => {
+    repo.liquidityCentsValue = -30000;
+    repo.stockInvestmentCentsValue = 200000;
+
+    const [liq, cap] = await Promise.all([
+      liquidity.execute(),
+      operatingCapital.execute(),
+    ]);
+
+    expect(liq.liquidityCents).toBe(-30000);
+    expect(cap.liquidityCents).toBe(-30000);
+    expect(cap.operatingCapitalCents).toBe(170000); // -30000 + 200000
+  });
+});

@@ -8,6 +8,16 @@
  *
  * Defined in the domain layer so application use cases depend on an
  * interface, keeping the domain pure.
+ *
+ * ── Monetary aggregate contract ─────────────────────────────────
+ *
+ * ALL monetary values returned by this port MUST be integer cents.
+ * Implementations MUST normalize raw DB outputs at the infrastructure
+ * boundary before returning. Values with fractional cents, string
+ * representations, or null MUST be coerced to integer cents (or zero).
+ *
+ * This invariant is enforced at the adapter level. Application and
+ * domain consumers rely on receiving only integer cents.
  */
 
 // ── Report DTOs ───────────────────────────────────────────────
@@ -19,6 +29,7 @@ export interface StockByProductItem {
   variantName: string;
   sku: string;
   totalRemainingQty: number;
+  /** Investment value in integer cents. */
   investmentCents: number;
 }
 
@@ -30,7 +41,9 @@ export interface LotReportItem {
   purchaseDate: Date;
   purchasedQuantity: number;
   remainingQuantity: number;
+  /** Cost per unit in integer cents. */
   unitCostCents: number;
+  /** Total cost (remainingQuantity × unitCostCents) in integer cents. */
   totalCostCents: number;
   status: 'OPEN' | 'EXHAUSTED';
 }

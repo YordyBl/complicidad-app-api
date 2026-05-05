@@ -15,7 +15,8 @@ import { SaleLineId } from '../../../src/modules/sales-returns/domain/SaleLineId
 // ── Constants ─────────────────────────────────────────────────
 
 const CUSTOMER_ID = 'customer-1';
-const CHANNEL = 'web-order-123';
+const CHANNEL_REF = 'web-order-123';
+const CHANNEL = 'web';
 const SALE_DATE = new Date('2026-01-15T10:00:00Z');
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -52,6 +53,19 @@ function makeLine(
   );
 }
 
+function makeSale(lines: SaleLine[], status: 'ACTIVE' | 'CANCELLED' | 'RETURNED' = 'ACTIVE'): Sale {
+  return new Sale(
+    SaleId.generate(),
+    CUSTOMER_ID,
+    CHANNEL_REF,
+    CHANNEL,
+    lines,
+    status,
+    SALE_DATE,
+    SALE_DATE,
+  );
+}
+
 // ── Tests ────────────────────────────────────────────────────
 
 describe('Sale domain — FIFO consumption calculations', () => {
@@ -59,16 +73,7 @@ describe('Sale domain — FIFO consumption calculations', () => {
     it('calculates total revenue, cost, and gross profit for a single item', () => {
       const consumption = makeConsumption('c1', 'lot-1', 2, 500); // 2 * 500 = 1000 cost
       const line = makeLine('line-1', 'variant-1', 2, 1500, [consumption]); // 2 * 1500 = 3000 revenue
-
-      const sale = new Sale(
-        SaleId.generate(),
-        CUSTOMER_ID,
-        CHANNEL,
-        [line],
-        'ACTIVE',
-        SALE_DATE,
-        SALE_DATE,
-      );
+      const sale = makeSale([line]);
 
       expect(sale.totalRevenue.cents).toBe(3000);
       expect(sale.totalCost.cents).toBe(1000);
@@ -83,16 +88,7 @@ describe('Sale domain — FIFO consumption calculations', () => {
       // total cost = 1900
 
       const line = makeLine('line-1', 'variant-1', 8, 1000, [c1, c2]); // 8 * 1000 = 8000 revenue
-
-      const sale = new Sale(
-        SaleId.generate(),
-        CUSTOMER_ID,
-        CHANNEL,
-        [line],
-        'ACTIVE',
-        SALE_DATE,
-        SALE_DATE,
-      );
+      const sale = makeSale([line]);
 
       expect(sale.totalRevenue.cents).toBe(8000);
       expect(sale.totalCost.cents).toBe(1900);
@@ -110,15 +106,7 @@ describe('Sale domain — FIFO consumption calculations', () => {
       const c2 = makeConsumption('c2', 'lot-2', 2, 1200);
       const line2 = makeLine('line-2', 'variant-2', 2, 5000, [c2]);
 
-      const sale = new Sale(
-        SaleId.generate(),
-        CUSTOMER_ID,
-        CHANNEL,
-        [line1, line2],
-        'ACTIVE',
-        SALE_DATE,
-        SALE_DATE,
-      );
+      const sale = makeSale([line1, line2]);
 
       // Revenue: 6000 + 10000 = 16000
       expect(sale.totalRevenue.cents).toBe(16000);
@@ -133,15 +121,7 @@ describe('Sale domain — FIFO consumption calculations', () => {
       const line1 = makeLine('line-1', 'v1', 5, 1000, [c1]);
       const line2 = makeLine('line-2', 'v2', 1, 500, []); // zero cost
 
-      const sale = new Sale(
-        SaleId.generate(),
-        CUSTOMER_ID,
-        CHANNEL,
-        [line1, line2],
-        'ACTIVE',
-        SALE_DATE,
-        SALE_DATE,
-      );
+      const sale = makeSale([line1, line2]);
 
       expect(sale.totalRevenue.cents).toBe(5500); // 5*1000 + 1*500
       expect(sale.totalCost.cents).toBe(2000); // 5*400 + 0
@@ -154,16 +134,7 @@ describe('Sale domain — FIFO consumption calculations', () => {
       // The consumption records freeze the costs at sale time
       const consumption = makeConsumption('c1', 'lot-1', 10, 750);
       const line = makeLine('line-1', 'v1', 10, 2000, [consumption]);
-
-      const sale = new Sale(
-        SaleId.generate(),
-        CUSTOMER_ID,
-        CHANNEL,
-        [line],
-        'ACTIVE',
-        SALE_DATE,
-        SALE_DATE,
-      );
+      const sale = makeSale([line]);
 
       // Verify frozen cost
       expect(sale.lines[0]!.consumptions[0]!.unitCost.cents).toBe(750);
@@ -176,27 +147,27 @@ describe('Sale domain — FIFO consumption calculations', () => {
     it('rejects sale with empty channel reference', () => {
       const line = makeLine('l1', 'v1', 1, 1000, []);
       expect(
-        () => new Sale(SaleId.generate(), CUSTOMER_ID, '', [line], 'ACTIVE', SALE_DATE, SALE_DATE),
+        () => new Sale(SaleId.generate(), CUSTOMER_ID, '', CHANNEL, [line], 'ACTIVE', SALE_DATE, SALE_DATE),
       ).toThrow('La referencia de canal es obligatoria');
     });
 
     it('rejects sale with whitespace-only channel reference', () => {
       const line = makeLine('l1', 'v1', 1, 1000, []);
       expect(
-        () => new Sale(SaleId.generate(), CUSTOMER_ID, '   ', [line], 'ACTIVE', SALE_DATE, SALE_DATE),
+        () => new Sale(SaleId.generate(), CUSTOMER_ID, '   ', CHANNEL, [line], 'ACTIVE', SALE_DATE, SALE_DATE),
       ).toThrow('La referencia de canal es obligatoria');
     });
 
     it('rejects sale with no lines', () => {
       expect(
-        () => new Sale(SaleId.generate(), CUSTOMER_ID, CHANNEL, [], 'ACTIVE', SALE_DATE, SALE_DATE),
+        () => new Sale(SaleId.generate(), CUSTOMER_ID, CHANNEL_REF, CHANNEL, [], 'ACTIVE', SALE_DATE, SALE_DATE),
       ).toThrow('La venta debe tener al menos una línea');
     });
 
     it('rejects invalid sale status', () => {
       const line = makeLine('l1', 'v1', 1, 1000, []);
       expect(
-        () => new Sale(SaleId.generate(), CUSTOMER_ID, CHANNEL, [line], 'INVALID' as 'ACTIVE', SALE_DATE, SALE_DATE),
+        () => new Sale(SaleId.generate(), CUSTOMER_ID, CHANNEL_REF, CHANNEL, [line], 'INVALID' as 'ACTIVE', SALE_DATE, SALE_DATE),
       ).toThrow('Estado de venta inválido');
     });
   });
@@ -204,20 +175,20 @@ describe('Sale domain — FIFO consumption calculations', () => {
   describe('sale status transitions', () => {
     it('starts as ACTIVE', () => {
       const line = makeLine('l1', 'v1', 1, 1000, []);
-      const sale = new Sale(SaleId.generate(), CUSTOMER_ID, CHANNEL, [line], 'ACTIVE', SALE_DATE, SALE_DATE);
+      const sale = makeSale([line]);
       expect(sale.status).toBe('ACTIVE');
     });
 
     it('can be cancelled', () => {
       const line = makeLine('l1', 'v1', 1, 1000, []);
-      const sale = new Sale(SaleId.generate(), CUSTOMER_ID, CHANNEL, [line], 'ACTIVE', SALE_DATE, SALE_DATE);
+      const sale = makeSale([line]);
       sale.cancel();
       expect(sale.status).toBe('CANCELLED');
     });
 
     it('rejects double cancellation', () => {
       const line = makeLine('l1', 'v1', 1, 1000, []);
-      const sale = new Sale(SaleId.generate(), CUSTOMER_ID, CHANNEL, [line], 'ACTIVE', SALE_DATE, SALE_DATE);
+      const sale = makeSale([line]);
       sale.cancel();
       expect(() => { sale.cancel(); }).toThrow('La venta ya está cancelada');
     });

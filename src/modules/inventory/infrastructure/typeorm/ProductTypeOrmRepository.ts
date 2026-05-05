@@ -40,6 +40,8 @@ interface VariantRow {
   sku: string;
   attributes: Record<string, string>;
   is_active: boolean;
+  /** Numeric aggregate from COALESCE(SUM(...), 0) — returned as string by PG */
+  stock: string;
 }
 
 // ── Implementation ──────────────────────────────────────────
@@ -176,7 +178,14 @@ export class ProductTypeOrmRepository
     const prodRows: ProductRow[] = await this.manager.query(prodQuery, pageIds);
 
     // ── Step 4: Load variants for page product IDs ──────────
-    const varQuery = `SELECT * FROM variants WHERE product_id IN (${inParams.join(', ')})`;
+    // LEFT JOIN with inventory_lots to compute available stock per variant
+    const varQuery = `
+      SELECT v.*, COALESCE(SUM(il.remaining_quantity), 0) AS stock
+      FROM variants v
+      LEFT JOIN inventory_lots il ON il.variant_id = v.id AND il.remaining_quantity > 0
+      WHERE v.product_id IN (${inParams.join(', ')})
+      GROUP BY v.id
+    `;
     const varRows: VariantRow[] = await this.manager.query(varQuery, pageIds);
 
     // ── Step 5: Assemble items ──────────────────────────────
@@ -205,6 +214,7 @@ export class ProductTypeOrmRepository
         sku: v.sku,
         attributes: v.attributes,
         isActive: v.is_active,
+        stock: Number(v.stock),
       })),
     }));
 

@@ -85,6 +85,7 @@ function makeItem(productId: string, name: string, variantCount = 1) {
     sku: `SKU-${productId}-${i}`,
     attributes: {},
     isActive: true,
+    stock: 0,
   }));
   return {
     id: productId,
@@ -116,6 +117,9 @@ describe('GET /api/v1/products (E2E)', () => {
 
   it('returns 200 with data and meta on default request', async () => {
     const items = [makeItem('p1', 'Coca Cola', 2), makeItem('p2', 'Pepsi', 1)];
+    // Set non-zero stock on first product's variants to prove stock flows through response
+    items[0]!.variants[0]!.stock = 10;
+    items[0]!.variants[1]!.stock = 5;
     listProducts.setNextResult({
       items,
       meta: {
@@ -134,6 +138,10 @@ describe('GET /api/v1/products (E2E)', () => {
     expect(res.body.data).toHaveLength(2);
     expect(res.body.data[0].name).toBe('Coca Cola');
     expect(res.body.data[0].variants).toHaveLength(2);
+    // Non-zero stock assertion: proves variant stock is exposed in the listing response
+    expect(res.body.data[0].variants[0].stock).toBe(10);
+    expect(res.body.data[0].variants[1].stock).toBe(5);
+    expect(res.body.data[0].variants[0].sku).toBe('SKU-p1-0');
     expect(res.body.meta.page).toBe(1);
     expect(res.body.meta.totalItems).toBe(2);
     expect(res.body.meta.sortBy).toBe('createdAt');

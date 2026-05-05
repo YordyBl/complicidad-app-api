@@ -3,6 +3,7 @@
  *
  * A Sale represents a transaction with a customer. It requires:
  * - A customer (by ID)
+ * - A channel (closed catalog: tiktok | facebook | whatsapp | web | instagram)
  * - A channel reference (platform/order link)
  * - At least one sale line
  *
@@ -19,6 +20,9 @@ import type { SaleLine } from './SaleLine.js';
 export const SALE_STATUSES = ['ACTIVE', 'CANCELLED', 'RETURNED'] as const;
 export type SaleStatus = (typeof SALE_STATUSES)[number];
 
+export const SALE_CHANNELS = ['tiktok', 'facebook', 'whatsapp', 'web', 'instagram'] as const;
+export type SaleChannel = (typeof SALE_CHANNELS)[number];
+
 // ── Error ────────────────────────────────────────────────────
 
 export class SaleStatusError extends BusinessRuleError {
@@ -32,6 +36,7 @@ export class Sale {
     private readonly _id: SaleId,
     private readonly _customerId: string,
     private readonly _channelReference: string,
+    private readonly _channel: SaleChannel,
     private _lines: SaleLine[],
     private _status: SaleStatus,
     private readonly _createdAt: Date,
@@ -40,6 +45,11 @@ export class Sale {
     // ── Invariants ──────────────────────────────────────────
     if (!_channelReference || _channelReference.trim().length === 0) {
       throw new BusinessRuleError('La referencia de canal es obligatoria');
+    }
+    if (!SALE_CHANNELS.includes(_channel)) {
+      throw new BusinessRuleError(
+        `Canal inválido: "${_channel}". Debe ser uno de: ${SALE_CHANNELS.join(', ')}`,
+      );
     }
     if (_lines.length === 0) {
       throw new BusinessRuleError('La venta debe tener al menos una línea');
@@ -61,6 +71,10 @@ export class Sale {
 
   get channelReference(): string {
     return this._channelReference;
+  }
+
+  get channel(): SaleChannel {
+    return this._channel;
   }
 
   get lines(): readonly SaleLine[] {
@@ -129,6 +143,6 @@ export class Sale {
   }
 
   toString(): string {
-    return `Sale(id=${this._id.toString()}, customer=${this._customerId}, channel=${this._channelReference}, status=${this._status}, revenue=${this.totalRevenue.toString()}, profit=${this.grossProfit.toString()})`;
+    return `Sale(id=${this._id.toString()}, customer=${this._customerId}, channel=${this._channel}, channelRef=${this._channelReference}, status=${this._status}, revenue=${this.totalRevenue.toString()}, profit=${this.grossProfit.toString()})`;
   }
 }

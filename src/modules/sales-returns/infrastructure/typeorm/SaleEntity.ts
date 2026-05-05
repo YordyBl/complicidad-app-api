@@ -15,6 +15,9 @@ export class SaleEntity extends BaseEntity {
   @Column({ name: 'channel_reference', type: 'varchar', length: 255 })
   channelReference!: string;
 
+  @Column({ type: 'varchar', length: 20, default: 'web' })
+  channel!: string;
+
   @Column({ type: 'varchar', length: 20, default: 'ACTIVE' })
   status!: string;
 

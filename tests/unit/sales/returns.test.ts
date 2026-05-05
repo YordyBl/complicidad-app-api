@@ -20,7 +20,8 @@ import { PurchaseId } from '../../../src/modules/inventory/domain/PurchaseId.js'
 // ── Constants ─────────────────────────────────────────────────
 
 const CUSTOMER_ID = 'customer-1';
-const CHANNEL = 'web-order-123';
+const CHANNEL_REF = 'web-order-123';
+const CHANNEL = 'web';
 const SALE_DATE = new Date('2026-01-15T10:00:00Z');
 const LOT_DATE = new Date('2026-01-01T00:00:00Z');
 
@@ -81,6 +82,7 @@ function makeActiveSale(lines: SaleLine[]): Sale {
   return new Sale(
     SaleId.generate(),
     CUSTOMER_ID,
+    CHANNEL_REF,
     CHANNEL,
     lines,
     'ACTIVE',

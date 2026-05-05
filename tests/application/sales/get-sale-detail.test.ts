@@ -2,13 +2,12 @@
  * Application tests for GetSaleDetailUseCase.
  *
  * Verifies:
- * - Found sale → returns ok(SaleDetailResponse) with lines and consumptions
+ * - Found sale → returns ok(SaleDetailResponse) with lines, consumptions, and channel
  * - Not found sale → returns err(NotFoundError)
- * - DTO shape includes nested line totals and consumption details
+ * - DTO shape includes channel, nested line totals and consumption details
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { SaleRepository } from '../../../src/modules/sales-returns/domain/SaleRepository.js';
-import type { Sale } from '../../../src/modules/sales-returns/domain/Sale.js';
 import type { SaleId } from '../../../src/modules/sales-returns/domain/SaleId.js';
 import { Money } from '../../../src/shared/domain/Money.js';
 import { NotFoundError } from '../../../src/shared/domain/errors.js';
@@ -84,6 +83,7 @@ function makeSaleWithLines(saleId: string): SaleEntity {
     SaleIdEntity.from(saleId),
     'customer-1',
     'web-order-123',
+    'web',
     [line1, line2],
     'ACTIVE',
     new Date('2026-03-15T10:00:00.000Z'),
@@ -95,7 +95,6 @@ function makeSaleWithLines(saleId: string): SaleEntity {
 
 describe('GetSaleDetailUseCase', () => {
   let repo: FakeSaleRepository;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let useCase: any;
 
   beforeEach(async () => {
@@ -107,7 +106,7 @@ describe('GetSaleDetailUseCase', () => {
   });
 
   describe('found sale', () => {
-    it('returns ok with full detail DTO', async () => {
+    it('returns ok with full detail DTO including channel', async () => {
       const result = await useCase.execute({ saleId: 'sale-1' });
 
       expect(result.ok).toBe(true);
@@ -117,6 +116,7 @@ describe('GetSaleDetailUseCase', () => {
       expect(detail.id).toBe('sale-1');
       expect(detail.customerId).toBe('customer-1');
       expect(detail.channelReference).toBe('web-order-123');
+      expect(detail.channel).toBe('web');
       expect(detail.status).toBe('ACTIVE');
       expect(detail.createdAt).toBe('2026-03-15T10:00:00.000Z');
       expect(detail.updatedAt).toBe('2026-03-16T14:30:00.000Z');

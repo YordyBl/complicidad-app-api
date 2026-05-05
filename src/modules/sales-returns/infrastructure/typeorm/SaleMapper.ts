@@ -5,7 +5,8 @@
  * bidirectionally.
  */
 import type { BaseMapper } from '../../../../infrastructure/typeorm/mappers/BaseMapper.js';
-import { Sale } from '../../domain/Sale.js';
+import { Sale, SALE_CHANNELS } from '../../domain/Sale.js';
+import type { SaleChannel } from '../../domain/Sale.js';
 import { SaleId } from '../../domain/SaleId.js';
 import { SaleLine, type PriceType } from '../../domain/SaleLine.js';
 import { SaleLineId } from '../../domain/SaleLineId.js';
@@ -39,10 +40,15 @@ export class SaleMapper implements BaseMapper<Sale, SaleEntity> {
       );
     });
 
+    const channel = SALE_CHANNELS.includes(entity.channel as SaleChannel)
+      ? (entity.channel as SaleChannel)
+      : 'web';
+
     return new Sale(
       SaleId.from(entity.id),
       entity.customerId,
       entity.channelReference,
+      channel,
       lines,
       entity.status as 'ACTIVE' | 'CANCELLED' | 'RETURNED',
       entity.createdAt,
@@ -55,6 +61,7 @@ export class SaleMapper implements BaseMapper<Sale, SaleEntity> {
     entity.id = domain.id.toString();
     entity.customerId = domain.customerId;
     entity.channelReference = domain.channelReference;
+    entity.channel = domain.channel;
     entity.status = domain.status;
 
     entity.lines = domain.lines.map((line) => {

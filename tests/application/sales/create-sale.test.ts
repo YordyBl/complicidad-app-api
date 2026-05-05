@@ -9,9 +9,11 @@
  * - Required channel reference validation
  * - Cash ledger entry creation for sales income
  * - Exact profit calculations
+ * - Closed SaleChannel catalog validation
+ * - Integer quantity validation
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CreateSaleUseCase, MissingChannelReferenceError } from '../../../src/modules/sales-returns/application/use-cases/CreateSaleUseCase.js';
+import { CreateSaleUseCase, MissingChannelReferenceError, InvalidChannelError, InvalidQuantityError } from '../../../src/modules/sales-returns/application/use-cases/CreateSaleUseCase.js';
 import type { CreateSaleCommand } from '../../../src/modules/sales-returns/application/use-cases/CreateSaleUseCase.js';
 import type { UnitOfWork, UnitOfWorkScope } from '../../../src/shared/application/UnitOfWork.js';
 import type { CustomerRepository } from '../../../src/modules/customers/domain/CustomerRepository.js';
@@ -335,6 +337,7 @@ describe('CreateSaleUseCase', () => {
 
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
+        channel: 'web',
         channelReference: 'shopify-order-456',
         items: [
           { variantId: 'v1', quantity: 3, priceType: 'regular' },
@@ -384,6 +387,7 @@ describe('CreateSaleUseCase', () => {
 
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
+        channel: 'web',
         channelReference: 'web-order',
         items: [{ variantId: 'v1', quantity: 7, priceType: 'regular' }],
       };
@@ -417,6 +421,7 @@ describe('CreateSaleUseCase', () => {
 
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
+        channel: 'web',
         channelReference: 'web-order',
         items: [{ variantId: 'v1', quantity: 10, priceType: 'regular' }],
       };
@@ -432,6 +437,7 @@ describe('CreateSaleUseCase', () => {
     it('rejects sale when variant has no lots at all', async () => {
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
+        channel: 'web',
         channelReference: 'web-order',
         items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
       };
@@ -450,6 +456,7 @@ describe('CreateSaleUseCase', () => {
     it('rejects sale with unknown customer', async () => {
       const command: CreateSaleCommand = {
         customerId: 'non-existent-customer',
+        channel: 'web',
         channelReference: 'web-order',
         items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
       };
@@ -471,6 +478,7 @@ describe('CreateSaleUseCase', () => {
 
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
+        channel: 'web',
         channelReference: '',
         items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
       };
@@ -485,6 +493,7 @@ describe('CreateSaleUseCase', () => {
     it('rejects sale with whitespace-only channel reference', async () => {
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
+        channel: 'web',
         channelReference: '   ',
         items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
       };
@@ -497,6 +506,100 @@ describe('CreateSaleUseCase', () => {
     });
   });
 
+  // ── SaleChannel catalog validation ─────────────────────────
+
+  describe('SaleChannel catalog validation', () => {
+    it('accepts all valid SaleChannel values', async () => {
+      lotRepo.lots.set('lot-1', createTestLot('lot-1', 'v1', 10, 500, new Date('2026-01-01')));
+
+      const channels: CreateSaleCommand['channel'][] = ['tiktok', 'facebook', 'whatsapp', 'web', 'instagram'];
+      for (const channel of channels) {
+        const command: CreateSaleCommand = {
+          customerId: 'customer-1',
+          channel,
+          channelReference: `${channel}-order`,
+          items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
+        };
+
+        const result = await useCase.execute(command, createUow());
+        expect(result.ok).toBe(true);
+      }
+
+      // 5 sales created, one per channel
+      expect(saleRepo.sales.size).toBe(5);
+      expect(cashRepo.entries).toHaveLength(5);
+    });
+
+    it('rejects sale with invalid channel', async () => {
+      const command = {
+        customerId: 'customer-1',
+        channel: 'shopify-order-456',
+        channelReference: 'some-ref',
+        items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
+      } as unknown as CreateSaleCommand;
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBeInstanceOf(InvalidChannelError);
+      expect(result.error.message).toContain('shopify-order-456');
+    });
+
+    it('rejects sale with empty channel', async () => {
+      const command = {
+        customerId: 'customer-1',
+        channel: '',
+        channelReference: 'some-ref',
+        items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
+      } as unknown as CreateSaleCommand;
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBeInstanceOf(InvalidChannelError);
+    });
+  });
+
+  // ── Integer quantity validation ────────────────────────────
+
+  describe('integer quantity validation', () => {
+    it('rejects sale with fractional quantity', async () => {
+      lotRepo.lots.set('lot-1', createTestLot('lot-1', 'v1', 10, 500, new Date('2026-01-01')));
+
+      const command: CreateSaleCommand = {
+        customerId: 'customer-1',
+        channel: 'web',
+        channelReference: 'web-order',
+        items: [{ variantId: 'v1', quantity: 1.5, priceType: 'regular' }],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBeInstanceOf(InvalidQuantityError);
+      expect(result.error.message).toContain('entero');
+    });
+
+    it('rejects sale with non-integer quantity (3.0 is accepted as integer in JS)', async () => {
+      lotRepo.lots.set('lot-1', createTestLot('lot-1', 'v1', 10, 500, new Date('2026-01-01')));
+
+      const command: CreateSaleCommand = {
+        customerId: 'customer-1',
+        channel: 'web',
+        channelReference: 'web-order',
+        items: [{ variantId: 'v1', quantity: 3.0, priceType: 'regular' }],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      // 3.0 is integer in JS (Number.isInteger(3.0) === true)
+      expect(result.ok).toBe(true);
+    });
+  });
+
   // ── Cash entry creation ────────────────────────────────────
 
   describe('cash entry creation', () => {
@@ -505,6 +608,7 @@ describe('CreateSaleUseCase', () => {
 
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
+        channel: 'web',
         channelReference: 'pos-terminal-001',
         items: [{ variantId: 'v1', quantity: 3, priceType: 'regular' }],
       };
@@ -531,6 +635,7 @@ describe('CreateSaleUseCase', () => {
 
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
+        channel: 'web',
         channelReference: 'web-order',
         items: [{ variantId: 'v1', quantity: 4, priceType: 'regular' }],
       };
@@ -558,6 +663,7 @@ describe('CreateSaleUseCase', () => {
 
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
+        channel: 'web',
         channelReference: 'web-order',
         items: [
           { variantId: 'v1', quantity: 2, priceType: 'regular' },
@@ -596,6 +702,7 @@ describe('CreateSaleUseCase', () => {
 
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
+        channel: 'web',
         channelReference: 'presale-order',
         items: [{ variantId: 'v-presale', quantity: 2, priceType: 'presale' }],
       };
@@ -632,6 +739,7 @@ describe('CreateSaleUseCase', () => {
 
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
+        channel: 'web',
         channelReference: 'fallback-order',
         items: [{ variantId: 'v-no-presale', quantity: 3, priceType: 'presale' }],
       };
@@ -668,6 +776,7 @@ describe('CreateSaleUseCase', () => {
       // Step 1: Create the sale at original price ($20.00)
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
+        channel: 'web',
         channelReference: 'snapshot-order',
         items: [{ variantId: 'v-snap', quantity: 2, priceType: 'regular' }],
       };
@@ -696,6 +805,7 @@ describe('CreateSaleUseCase', () => {
 
       const command2: CreateSaleCommand = {
         customerId: 'customer-1',
+        channel: 'web',
         channelReference: 'new-price-order',
         items: [{ variantId: 'v-snap', quantity: 1, priceType: 'regular' }],
       };
@@ -729,6 +839,7 @@ describe('CreateSaleUseCase', () => {
       // Step 1: Create presale at $15.00
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
+        channel: 'web',
         channelReference: 'presale-snap-order',
         items: [{ variantId: 'v-presale-snap', quantity: 3, priceType: 'presale' }],
       };
@@ -759,6 +870,7 @@ describe('CreateSaleUseCase', () => {
 
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
+        channel: 'web',
         channelReference: 'web-order',
         items: [{ variantId: 'non-existent-variant', quantity: 1, priceType: 'regular' }],
       };

@@ -229,6 +229,7 @@ async function rawListProducts(
       sku: v.sku,
       attributes: v.attributes ?? {},
       isActive: v.is_active ?? true,
+      stock: 0,
     })),
   }));
 
@@ -409,10 +410,10 @@ describe('ProductTypeOrmRepository.listProducts() — query correctness', () => 
         sale_price_cents: 1000, presale_price_cents: null, aliases: null, is_active: true,
         created_at: new Date('2026-01-01'), updated_at: new Date('2026-01-01'),
       }])
-      // Step 4: Variants for page IDs (no price column)
+      // Step 4: Variants for page IDs (with stock)
       .mockResolvedValueOnce([{
         id: 'var-1', product_id: 'prod-1', sku: 'SKU-001',
-        attributes: {}, is_active: true,
+        attributes: {}, is_active: true, stock: '5',
       }]);
 
     const mockManager = {
@@ -450,9 +451,10 @@ describe('ProductTypeOrmRepository.listProducts() — query correctness', () => 
     expect(querySpy.mock.calls[2]![0]).toContain('FROM products p');
     expect(querySpy.mock.calls[2]![0]).toContain('ORDER BY');
 
-    // Step 4: Variants query
-    expect(querySpy.mock.calls[3]![0]).toContain('FROM variants');
-    expect(querySpy.mock.calls[3]![0]).toContain('WHERE product_id IN');
+    // Step 4: Variants query with stock from inventory_lots
+    expect(querySpy.mock.calls[3]![0]).toContain('FROM variants v');
+    expect(querySpy.mock.calls[3]![0]).toContain('LEFT JOIN inventory_lots');
+    expect(querySpy.mock.calls[3]![0]).toContain('WHERE v.product_id IN');
 
     // Verify response shape
     expect(result.items).toHaveLength(1);

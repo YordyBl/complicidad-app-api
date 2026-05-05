@@ -428,14 +428,20 @@ describe('Full-flow E2E: login → purchase → sale → return → reports', ()
     // ── Step 4: Register purchases (create FIFO lots) ────────
     const p1Res = await request(app)
       .post('/purchases')
-      .send({ variantId: 'e2e-v1', quantity: 10, unitCost: 5.00, notes: 'Initial stock' });
+      .send({
+        items: [{ variantId: 'e2e-v1', quantity: 10, unitCost: 5.00 }],
+        notes: 'Initial stock',
+      });
     expect(p1Res.status).toBe(201);
-    expect(p1Res.body.lotId).toBeDefined();
-    const lot1Id = p1Res.body.lotId as string;
+    expect(p1Res.body.lots).toHaveLength(1);
+    expect(p1Res.body.lots[0]!.lotId).toBeDefined();
+    const lot1Id = p1Res.body.lots[0]!.lotId as string;
 
     const p2Res = await request(app)
       .post('/purchases')
-      .send({ variantId: 'e2e-v2', quantity: 5, unitCost: 12.00 });
+      .send({
+        items: [{ variantId: 'e2e-v2', quantity: 5, unitCost: 12.00 }],
+      });
     expect(p2Res.status).toBe(201);
 
     // Verify lots created and cash entries recorded
@@ -453,6 +459,7 @@ describe('Full-flow E2E: login → purchase → sale → return → reports', ()
       .post('/sales')
       .send({
         customerId: 'e2e-customer-1',
+        channel: 'web',
         channelReference: 'shopify-order-999',
         items: [
           { variantId: 'e2e-v1', quantity: 3, priceType: 'regular' },
@@ -553,6 +560,7 @@ describe('Full-flow E2E: login → purchase → sale → return → reports', ()
       .post('/sales')
       .send({
         customerId: 'nonexistent',
+        channel: 'web',
         channelReference: 'test',
         items: [{ variantId: 'e2e-v1', quantity: 1, priceType: 'regular' }],
       });
@@ -563,7 +571,9 @@ describe('Full-flow E2E: login → purchase → sale → return → reports', ()
   it('should return 404 for purchase with invalid variant', async () => {
     const res = await request(app)
       .post('/purchases')
-      .send({ variantId: 'nonexistent', quantity: 5, unitCost: 1.00 });
+      .send({
+        items: [{ variantId: 'nonexistent', quantity: 5, unitCost: 1.00 }],
+      });
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('NotFoundError');
   });
@@ -571,8 +581,22 @@ describe('Full-flow E2E: login → purchase → sale → return → reports', ()
   it('should return 400 for sale with validation errors', async () => {
     const res = await request(app)
       .post('/sales')
-      .send({ customerId: 'e2e-customer-1', channelReference: '', items: [] });
+      .send({ customerId: 'e2e-customer-1', channel: 'web', channelReference: '', items: [] });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('ValidationError');
+  });
+
+  it('should return 400 for invalid sale channel', async () => {
+    const res = await request(app)
+      .post('/sales')
+      .send({
+        customerId: 'e2e-customer-1',
+        channel: 'shopify-order-456',
+        channelReference: 'external-ref',
+        items: [{ variantId: 'e2e-v1', quantity: 1, priceType: 'regular' }],
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('ValidationError');
+    expect(res.body.message).toContain('channel inválido');
   });
 });

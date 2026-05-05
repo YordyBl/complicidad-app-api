@@ -14,6 +14,31 @@ import type {
   LotReportItem,
 } from '../../domain/ReportReadRepository.js';
 
+/**
+ * Normalize a raw DB aggregate value to integer cents.
+ *
+ * PostgreSQL aggregate queries can return number, string, or null
+ * depending on the driver and query shape. This helper ensures
+ * the return value is always a safe integer cent, treating null
+ * and undefined as zero.
+ *
+ * Accepts `unknown` because TypeORM's getRawMany/getRawOne return
+ * Record<string, unknown>, and this function is the normalization
+ * boundary where any DB value type must be coerced.
+ *
+ * Negative values are preserved — only the type/scale is coerced.
+ * This MUST be the only normalization point for monetary aggregates
+ * at the infrastructure boundary.
+ */
+export function normalizeCents(value: unknown): number {
+  if (value == null) return 0;
+  if (typeof value === 'number') return Math.round(value);
+  if (typeof value === 'string') return Math.round(Number(value));
+  // Unexpected types (bool, object, etc.) — should never reach here
+  // from DB aggregate queries, but boundary must handle gracefully.
+  return 0;
+}
+
 export class ReportQueryAdapter implements ReportReadRepository {
   constructor(private readonly manager: EntityManager) {}
 
@@ -24,7 +49,7 @@ export class ReportQueryAdapter implements ReportReadRepository {
       .from('cash_ledger_entries', 'e')
       .getRawOne<{ total: number | null }>();
 
-    return result?.total ?? 0;
+    return normalizeCents(result?.total);
   }
 
   async getStockInvestmentCents(): Promise<number> {
@@ -35,7 +60,7 @@ export class ReportQueryAdapter implements ReportReadRepository {
       .where('l.remaining_quantity > 0')
       .getRawOne<{ total: number | null }>();
 
-    return result?.total ?? 0;
+    return normalizeCents(result?.total);
   }
 
   async getSalesIncomeCents(): Promise<number> {
@@ -47,7 +72,7 @@ export class ReportQueryAdapter implements ReportReadRepository {
       .where("s.status = 'ACTIVE'")
       .getRawOne<{ total: number | null }>();
 
-    return result?.total ?? 0;
+    return normalizeCents(result?.total);
   }
 
   async getFifoCostsCents(): Promise<number> {
@@ -60,7 +85,7 @@ export class ReportQueryAdapter implements ReportReadRepository {
       .where("s.status = 'ACTIVE'")
       .getRawOne<{ total: number | null }>();
 
-    return result?.total ?? 0;
+    return normalizeCents(result?.total);
   }
 
   async getReinvestmentCents(): Promise<number> {
@@ -72,7 +97,7 @@ export class ReportQueryAdapter implements ReportReadRepository {
       .getRawOne<{ total: number | null }>();
 
     // amount_cents is negative for outflows; return the absolute value
-    return result ? Math.abs(result.total ?? 0) : 0;
+    return Math.abs(normalizeCents(result?.total));
   }
 
   async getStockByProduct(): Promise<StockByProductItem[]> {
@@ -106,7 +131,7 @@ export class ReportQueryAdapter implements ReportReadRepository {
       variantName: r.variant_name as string,
       sku: r.sku as string,
       totalRemainingQty: Number(r.total_remaining_qty),
-      investmentCents: Number(r.investment_cents),
+      investmentCents: normalizeCents(r.investment_cents),
     }));
   }
 
@@ -132,7 +157,7 @@ export class ReportQueryAdapter implements ReportReadRepository {
 
     return rows.map((r: Record<string, unknown>) => {
       const remainingQty = Number(r.remaining_quantity);
-      const unitCostCents = Number(r.unit_cost_cents);
+      const unitCostCents = normalizeCents(r.unit_cost_cents);
       return {
         lotId: r.lot_id as string,
         variantId: r.variant_id as string,

@@ -130,11 +130,13 @@ function createSale(
   status: 'ACTIVE' | 'CANCELLED' | 'RETURNED',
   lines: SaleLine[],
   createdAt: Date,
+  channel: 'tiktok' | 'facebook' | 'whatsapp' | 'web' | 'instagram' = 'web',
 ): SaleEntity {
   return new SaleEntity(
     SaleId.from(id),
     customerId,
     channelReference,
+    channel,
     lines,
     status,
     createdAt,

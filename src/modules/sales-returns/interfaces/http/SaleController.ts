@@ -12,6 +12,8 @@ import type { ReturnFullSaleUseCase } from '../../application/use-cases/ReturnFu
 import type { ListSalesUseCase } from '../../application/use-cases/ListSalesUseCase.js';
 import type { GetSaleDetailUseCase } from '../../application/use-cases/GetSaleDetailUseCase.js';
 import type { SaleFilters } from '../../domain/SaleRepository.js';
+import { SALE_CHANNELS } from '../../domain/Sale.js';
+import type { SaleChannel } from '../../domain/Sale.js';
 import { NotFoundError } from '../../../../shared/domain/errors.js';
 
 // Valid filter values defined in the domain spec
@@ -36,7 +38,7 @@ export class SaleController {
    * the authoritative unit price from the Product.
    */
   async create(req: Request, res: Response): Promise<void> {
-    const { customerId, channelReference, items } = req.body as Record<string, unknown>;
+    const { customerId, channel, channelReference, items } = req.body as Record<string, unknown>;
 
     if (typeof customerId !== 'string') {
       res.status(400).json({ error: 'ValidationError', message: 'customerId es obligatorio y debe ser un string' });
@@ -44,6 +46,13 @@ export class SaleController {
     }
     if (typeof channelReference !== 'string') {
       res.status(400).json({ error: 'ValidationError', message: 'channelReference es obligatorio y debe ser un string' });
+      return;
+    }
+    if (typeof channel !== 'string' || !SALE_CHANNELS.includes(channel as SaleChannel)) {
+      res.status(400).json({
+        error: 'ValidationError',
+        message: `channel inválido "${String(channel)}". Debe ser uno de: ${SALE_CHANNELS.join(', ')}`,
+      });
       return;
     }
     if (!Array.isArray(items) || items.length === 0) {
@@ -74,7 +83,12 @@ export class SaleController {
     }
 
     const result = await this.createSaleUseCase.execute(
-      { customerId, channelReference, items: parsedItems as Parameters<typeof this.createSaleUseCase.execute>[0]['items'] },
+      {
+        customerId,
+        channel: channel as SaleChannel,
+        channelReference,
+        items: parsedItems as Parameters<typeof this.createSaleUseCase.execute>[0]['items'],
+      },
       this.uow,
     );
 

@@ -2,10 +2,10 @@
  * Application tests for RegisterPurchaseUseCase.
  *
  * Tests the use case with fake repositories. Verifies:
- * - Valid purchase creates a lot + cash ledger entry
- * - Invalid variant returns error
- * - Negative quantity/cost rejected
- * - Transactional rollback on failure
+ * - Batch purchase with multiple items creates lots + single cash ledger entry
+ * - Invalid variant aborts the entire batch (no partial saves)
+ * - Empty items array / invalid item data rejected
+ * - Transactional contract: failure before any write leaves nothing persisted
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { RegisterPurchaseUseCase, InvalidQuantityError } from '../../../src/modules/inventory/application/use-cases/RegisterPurchaseUseCase.js';
@@ -153,8 +153,8 @@ class FakeUnitOfWork implements UnitOfWork {
 
 // ── Fixtures ─────────────────────────────────────────────────
 
-function createTestVariant(): VariantEntity {
-  const skuResult = SkuEntity.from('TEST-VARIANT');
+function createTestVariant(skuLabel = 'TEST-VARIANT'): VariantEntity {
+  const skuResult = SkuEntity.from(skuLabel);
   if (!skuResult.ok) throw new Error('Invalid SKU');
   return new VariantEntity(
     VariantIdEntity.generate(),
@@ -175,12 +175,15 @@ describe('RegisterPurchaseUseCase', () => {
   let purchaseRepo: FakePurchaseRepository;
   let cashRepo: FakeCashLedgerRepository;
   let useCase: RegisterPurchaseUseCase;
-  let variant: VariantEntity;
+  let variantA: VariantEntity;
+  let variantB: VariantEntity;
 
   beforeEach(() => {
-    variant = createTestVariant();
+    variantA = createTestVariant('VARIANT-A');
+    variantB = createTestVariant('VARIANT-B');
     variantRepo = new FakeVariantRepository();
-    variantRepo.setVariant(variant);
+    variantRepo.setVariant(variantA);
+    variantRepo.setVariant(variantB);
 
     lotRepo = new FakeInventoryLotRepository();
     purchaseRepo = new FakePurchaseRepository();
@@ -193,12 +196,13 @@ describe('RegisterPurchaseUseCase', () => {
     return new FakeUnitOfWork(lotRepo, purchaseRepo, cashRepo);
   }
 
-  describe('valid purchase', () => {
-    it('creates a purchase, lot, and cash ledger entry', async () => {
+  describe('batch purchase with items[]', () => {
+    it('creates multiple lots and one cash outflow from multiple items', async () => {
       const command: RegisterPurchaseCommand = {
-        variantId: variant.id.toString(),
-        quantity: 10,
-        unitCost: 5.00,
+        items: [
+          { variantId: variantA.id.toString(), quantity: 10, unitCost: 5.00 },
+          { variantId: variantB.id.toString(), quantity: 5, unitCost: 3.00 },
+        ],
       };
 
       const result = await useCase.execute(command, createUow());
@@ -206,34 +210,40 @@ describe('RegisterPurchaseUseCase', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
+      // Response has purchaseId and lots array
       expect(result.value.purchaseId).toBeDefined();
-      expect(result.value.lotId).toBeDefined();
-      expect(result.value.totalCost).toBe(50); // 10 * 500
+      expect(result.value.lots).toHaveLength(2);
 
-      // Verify lot was created
-      expect(lotRepo.lots.size).toBe(1);
-      const lot = Array.from(lotRepo.lots.values())[0]!;
-      expect(lot.remainingQuantity).toBe(10);
-      expect(lot.purchasedQuantity).toBe(10);
-      expect(lot.unitCost.cents).toBe(500);
+      // Total cost: 10*5 + 5*3 = 50 + 15 = 65 soles
+      expect(result.value.totalCost).toBe(65);
 
-      // Verify purchase was created
+      // Two lots persisted
+      expect(lotRepo.lots.size).toBe(2);
+      const lots = Array.from(lotRepo.lots.values());
+      const lotA = lots.find((l) => l.variantId.equals(variantA.id))!;
+      const lotB = lots.find((l) => l.variantId.equals(variantB.id))!;
+      expect(lotA.remainingQuantity).toBe(10);
+      expect(lotA.unitCost.cents).toBe(500);
+      expect(lotB.remainingQuantity).toBe(5);
+      expect(lotB.unitCost.cents).toBe(300);
+
+      // One purchase created
       expect(purchaseRepo.purchases.size).toBe(1);
 
-      // Verify cash ledger entry (negative outflow)
+      // One cash ledger entry for total (negative outflow)
       expect(cashRepo.entries).toHaveLength(1);
       expect(cashRepo.entries[0]!.type).toBe('PURCHASE_OUTFLOW');
-      expect(cashRepo.entries[0]!.amount.cents).toBe(-5000); // negative
+      expect(cashRepo.entries[0]!.amount.cents).toBe(-6500);
       expect(cashRepo.entries[0]!.tag).toBe('REINVESTMENT');
     });
 
-    it('accepts optional supplier and notes', async () => {
+    it('accepts optional supplier and notes shared across items', async () => {
       const command: RegisterPurchaseCommand = {
-        variantId: variant.id.toString(),
-        quantity: 5,
-        unitCost: 3.00,
+        items: [
+          { variantId: variantA.id.toString(), quantity: 5, unitCost: 3.00 },
+        ],
         supplierId: 'supplier-1',
-        notes: 'Restock order',
+        notes: 'Batch restock',
       };
 
       const result = await useCase.execute(command, createUow());
@@ -243,14 +253,14 @@ describe('RegisterPurchaseUseCase', () => {
 
       const purchase = Array.from(purchaseRepo.purchases.values())[0]!;
       expect(purchase.supplierId?.toString()).toBe('supplier-1');
-      expect(purchase.notes).toBe('Restock order');
+      expect(purchase.notes).toBe('Batch restock');
     });
 
-    it('accepts a custom purchase date', async () => {
+    it('accepts a custom purchase date shared across items', async () => {
       const command: RegisterPurchaseCommand = {
-        variantId: variant.id.toString(),
-        quantity: 3,
-        unitCost: 1.00,
+        items: [
+          { variantId: variantA.id.toString(), quantity: 3, unitCost: 1.00 },
+        ],
         purchaseDate: '2025-06-15T00:00:00.000Z',
       };
 
@@ -262,14 +272,42 @@ describe('RegisterPurchaseUseCase', () => {
       const lot = Array.from(lotRepo.lots.values())[0]!;
       expect(lot.purchaseDate.toISOString()).toBe('2025-06-15T00:00:00.000Z');
     });
+
+    it('single item purchase still works (backward compat)', async () => {
+      const command: RegisterPurchaseCommand = {
+        items: [
+          { variantId: variantA.id.toString(), quantity: 10, unitCost: 5.00 },
+        ],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.lots).toHaveLength(1);
+      expect(lotRepo.lots.size).toBe(1);
+      expect(cashRepo.entries).toHaveLength(1);
+      expect(cashRepo.entries[0]!.amount.cents).toBe(-5000);
+    });
   });
 
   describe('validation errors', () => {
-    it('rejects zero quantity', async () => {
+    it('rejects empty items array', async () => {
+      const command: RegisterPurchaseCommand = { items: [] };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBeInstanceOf(InvalidQuantityError);
+    });
+
+    it('rejects item with zero quantity', async () => {
       const command: RegisterPurchaseCommand = {
-        variantId: variant.id.toString(),
-        quantity: 0,
-        unitCost: 5.00,
+        items: [
+          { variantId: variantA.id.toString(), quantity: 0, unitCost: 5.00 },
+        ],
       };
 
       const result = await useCase.execute(command, createUow());
@@ -279,11 +317,11 @@ describe('RegisterPurchaseUseCase', () => {
       expect(result.error).toBeInstanceOf(InvalidQuantityError);
     });
 
-    it('rejects negative quantity', async () => {
+    it('rejects item with negative quantity', async () => {
       const command: RegisterPurchaseCommand = {
-        variantId: variant.id.toString(),
-        quantity: -1,
-        unitCost: 5.00,
+        items: [
+          { variantId: variantA.id.toString(), quantity: -1, unitCost: 5.00 },
+        ],
       };
 
       const result = await useCase.execute(command, createUow());
@@ -293,11 +331,67 @@ describe('RegisterPurchaseUseCase', () => {
       expect(result.error).toBeInstanceOf(InvalidQuantityError);
     });
 
-    it('rejects negative unit cost', async () => {
+    it('rejects item with negative unit cost', async () => {
       const command: RegisterPurchaseCommand = {
-        variantId: variant.id.toString(),
-        quantity: 10,
-        unitCost: -1.00,
+        items: [
+          { variantId: variantA.id.toString(), quantity: 10, unitCost: -1.00 },
+        ],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBeInstanceOf(InvalidQuantityError);
+    });
+
+    it('rejects item with fractional (non-integer) quantity', async () => {
+      const command: RegisterPurchaseCommand = {
+        items: [
+          { variantId: variantA.id.toString(), quantity: 1.5, unitCost: 5.00 },
+        ],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBeInstanceOf(InvalidQuantityError);
+    });
+
+    it('rejects batch when any item has fractional quantity even if others are valid', async () => {
+      const command: RegisterPurchaseCommand = {
+        items: [
+          { variantId: variantA.id.toString(), quantity: 10, unitCost: 5.00 },
+          { variantId: variantB.id.toString(), quantity: 2.5, unitCost: 3.00 },
+        ],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBeInstanceOf(InvalidQuantityError);
+    });
+
+    it('accepts quantity expressed as float with zero decimals (10.0)', async () => {
+      const command: RegisterPurchaseCommand = {
+        items: [
+          { variantId: variantA.id.toString(), quantity: 10.0, unitCost: 5.00 },
+        ],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('rejects negative unit cost even when other items are valid', async () => {
+      const command: RegisterPurchaseCommand = {
+        items: [
+          { variantId: variantA.id.toString(), quantity: 10, unitCost: 5.00 },
+          { variantId: variantB.id.toString(), quantity: 5, unitCost: -3.00 },
+        ],
       };
 
       const result = await useCase.execute(command, createUow());
@@ -309,11 +403,11 @@ describe('RegisterPurchaseUseCase', () => {
   });
 
   describe('variant lookup', () => {
-    it('returns NotFoundError for unknown variant', async () => {
+    it('returns NotFoundError for unknown variant in single-item batch', async () => {
       const command: RegisterPurchaseCommand = {
-        variantId: 'non-existent-id',
-        quantity: 5,
-        unitCost: 5.00,
+        items: [
+          { variantId: 'non-existent-id', quantity: 5, unitCost: 5.00 },
+        ],
       };
 
       const result = await useCase.execute(command, createUow());
@@ -322,29 +416,43 @@ describe('RegisterPurchaseUseCase', () => {
       if (result.ok) return;
       expect(result.error).toBeInstanceOf(NotFoundError);
     });
-  });
 
-  describe('transactional integrity', () => {
-    it('rejects the entire transaction when any step fails (no partial saves)', async () => {
-      // Since we use fakes without actual transaction rollback, this test
-      // validates that the use case propagates the error. A real TypeORM
-      // UnitOfWork would roll back the DB transaction.
-      // The test here validates the CONTRACT: the use case should reject
-      // when a step fails.
+    it('rejects entire batch when one item references unknown variant', async () => {
       const command: RegisterPurchaseCommand = {
-        variantId: 'non-existent',
-        quantity: 10,
-        unitCost: 5.00,
+        items: [
+          { variantId: variantA.id.toString(), quantity: 10, unitCost: 5.00 },
+          { variantId: 'bad-id', quantity: 5, unitCost: 3.00 },
+        ],
       };
 
-      // This fails at variant lookup, before any writes happen
       const result = await useCase.execute(command, createUow());
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error).toBeInstanceOf(NotFoundError);
 
-      // Nothing was persisted because the variant wasn't found
+      // Nothing was persisted — all-or-nothing
+      expect(lotRepo.lots.size).toBe(0);
+      expect(purchaseRepo.purchases.size).toBe(0);
+      expect(cashRepo.entries).toHaveLength(0);
+    });
+  });
+
+  describe('transactional integrity', () => {
+    it('persists nothing when any step fails before writes', async () => {
+      const command: RegisterPurchaseCommand = {
+        items: [
+          { variantId: 'non-existent', quantity: 10, unitCost: 5.00 },
+        ],
+      };
+
+      // This fails at variant lookup, before any writes
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBeInstanceOf(NotFoundError);
+
       expect(lotRepo.lots.size).toBe(0);
       expect(purchaseRepo.purchases.size).toBe(0);
       expect(cashRepo.entries).toHaveLength(0);

@@ -86,7 +86,7 @@ function makeVariant(
   sku: string,
   overrides: Partial<ProductVariantSummary> = {},
 ): ProductVariantSummary {
-  return { id, sku, attributes: {}, isActive: true, ...overrides };
+  return { id, sku, attributes: {}, isActive: true, stock: 0, ...overrides };
 }
 
 // ── Tests ────────────────────────────────────────────────────

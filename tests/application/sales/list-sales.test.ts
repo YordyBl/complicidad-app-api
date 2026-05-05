@@ -7,12 +7,11 @@
  * - Filter by date range
  * - Empty results (no matching sales)
  * - Invalid date → gracefully returns empty
- * - DTO mapping: Sale domain → SaleSummary (validates totals, lineCount)
+ * - DTO mapping: Sale domain → SaleSummary (validates totals, lineCount, channel)
  * - Default sortOrder = desc
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { SaleRepository, SaleFilters } from '../../../src/modules/sales-returns/domain/SaleRepository.js';
-import type { Sale } from '../../../src/modules/sales-returns/domain/Sale.js';
 import type { SaleId } from '../../../src/modules/sales-returns/domain/SaleId.js';
 import { Money } from '../../../src/shared/domain/Money.js';
 import { Sale as SaleEntity } from '../../../src/modules/sales-returns/domain/Sale.js';
@@ -75,6 +74,7 @@ function makeSale(
   status: 'ACTIVE' | 'CANCELLED' | 'RETURNED',
   createdAt: Date,
   channelRef = 'web-order-1',
+  channel: 'tiktok' | 'facebook' | 'whatsapp' | 'web' | 'instagram' = 'web',
   variantId = 'v1',
   quantity = 3,
   unitPriceCents = 1000,
@@ -89,25 +89,24 @@ function makeSale(
     'regular',
     [c],
   );
-  return new SaleEntity(SaleIdEntity.from(saleId), customerId, channelRef, [line], status, createdAt, createdAt);
+  return new SaleEntity(SaleIdEntity.from(saleId), customerId, channelRef, channel, [line], status, createdAt, createdAt);
 }
 
 // ── Tests ────────────────────────────────────────────────────
 
 describe('ListSalesUseCase', () => {
   let repo: FakeSaleRepository;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let useCase: any;
 
   beforeEach(async () => {
     repo = new FakeSaleRepository();
 
     // Seed sales across different customers, statuses, and dates
-    repo.sales.set('s1', makeSale('s1', 'cust-a', 'ACTIVE', new Date('2026-01-15'), 'order-a', 'v1', 2, 1500, 1000));
-    repo.sales.set('s2', makeSale('s2', 'cust-a', 'CANCELLED', new Date('2026-02-10'), 'order-b', 'v2', 1, 2000, 1500));
-    repo.sales.set('s3', makeSale('s3', 'cust-b', 'ACTIVE', new Date('2026-03-05'), 'order-c', 'v1', 5, 1000, 700));
+    repo.sales.set('s1', makeSale('s1', 'cust-a', 'ACTIVE', new Date('2026-01-15'), 'order-a', 'web', 'v1', 2, 1500, 1000));
+    repo.sales.set('s2', makeSale('s2', 'cust-a', 'CANCELLED', new Date('2026-02-10'), 'order-b', 'instagram', 'v2', 1, 2000, 1500));
+    repo.sales.set('s3', makeSale('s3', 'cust-b', 'ACTIVE', new Date('2026-03-05'), 'order-c', 'tiktok', 'v1', 5, 1000, 700));
 
-    // Dynamically import the use case (will fail until created → RED)
+    // Dynamically import the use case
     const mod = await import('../../../src/modules/sales-returns/application/use-cases/ListSalesUseCase.js');
     useCase = new mod.ListSalesUseCase(repo);
   });
@@ -167,7 +166,7 @@ describe('ListSalesUseCase', () => {
   });
 
   describe('DTO mapping', () => {
-    it('maps Sale domain entity to SaleSummary with correct computed totals', async () => {
+    it('maps Sale domain entity to SaleSummary with correct computed totals and channel', async () => {
       const result = await useCase.execute();
 
       const s1 = result.find((s: { saleId: string }) => s.saleId === 's1');
@@ -176,6 +175,7 @@ describe('ListSalesUseCase', () => {
         saleId: 's1',
         customerId: 'cust-a',
         channelReference: 'order-a',
+        channel: 'web',
         status: 'ACTIVE',
         totalRevenueCents: 3000,   // 2 * 1500
         totalCostCents: 2000,      // 2 * 1000
@@ -187,6 +187,18 @@ describe('ListSalesUseCase', () => {
       expect(typeof s1.updatedAt).toBe('string');
     });
 
+    it('exposes channel in SaleSummary for each sale', async () => {
+      const result = await useCase.execute();
+
+      const s2 = result.find((s: { saleId: string }) => s.saleId === 's2');
+      expect(s2).toBeDefined();
+      expect(s2.channel).toBe('instagram');
+
+      const s3 = result.find((s: { saleId: string }) => s.saleId === 's3');
+      expect(s3).toBeDefined();
+      expect(s3.channel).toBe('tiktok');
+    });
+
     it('maps multiple lines correctly', async () => {
       // Add a sale with 2 lines
       const c1 = makeConsumption('c-aa', 'lot-1', 3, 500);
@@ -194,7 +206,7 @@ describe('ListSalesUseCase', () => {
       const line1 = new SaleLine(SaleLineId.from('la'), 'v1', 3, Money.fromCents(2000), 'regular', [c1]);
       const line2 = new SaleLine(SaleLineId.from('lb'), 'v2', 2, Money.fromCents(1000), 'presale', [c2]);
       const multiLineSale = new SaleEntity(
-        SaleIdEntity.from('s-multi'), 'cust-c', 'order-m', [line1, line2], 'ACTIVE',
+        SaleIdEntity.from('s-multi'), 'cust-c', 'order-m', 'facebook', [line1, line2], 'ACTIVE',
         new Date('2026-01-01'), new Date('2026-01-01'),
       );
       repo.sales.set('s-multi', multiLineSale);
@@ -202,6 +214,7 @@ describe('ListSalesUseCase', () => {
       const result = await useCase.execute({ customerId: 'cust-c' });
       const s = result[0];
       expect(s.lineCount).toBe(2);
+      expect(s.channel).toBe('facebook');
       // Revenue: 3*2000 + 2*1000 = 8000
       expect(s.totalRevenueCents).toBe(8000);
       // Cost: 3*500 + 2*800 = 3100

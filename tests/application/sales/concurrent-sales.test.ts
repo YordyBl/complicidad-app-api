@@ -251,12 +251,14 @@ describe('Concurrent final-unit sales', () => {
     // Both sales want that 1 unit
     const command: CreateSaleCommand = {
       customerId: 'customer-1',
+      channel: 'web',
       channelReference: 'order-1',
       items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
     };
 
     const command2: CreateSaleCommand = {
       customerId: 'customer-1',
+      channel: 'web',
       channelReference: 'order-2',
       items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
     };
@@ -291,12 +293,14 @@ describe('Concurrent final-unit sales', () => {
 
     const command: CreateSaleCommand = {
       customerId: 'customer-1',
+      channel: 'web',
       channelReference: 'order-1',
       items: [{ variantId: 'v1', quantity: 3, priceType: 'regular' }],
     };
 
     const command2: CreateSaleCommand = {
       customerId: 'customer-1',
+      channel: 'web',
       channelReference: 'order-2',
       items: [{ variantId: 'v1', quantity: 5, priceType: 'regular' }],
     };
@@ -325,12 +329,14 @@ describe('Concurrent final-unit sales', () => {
 
     const command: CreateSaleCommand = {
       customerId: 'customer-1',
+      channel: 'web',
       channelReference: 'order-1',
       items: [{ variantId: 'v1', quantity: 3, priceType: 'regular' }],
     };
 
     const command2: CreateSaleCommand = {
       customerId: 'customer-1',
+      channel: 'web',
       channelReference: 'order-2',
       items: [{ variantId: 'v1', quantity: 3, priceType: 'regular' }],
     };
@@ -356,12 +362,14 @@ describe('Concurrent final-unit sales', () => {
 
     const bigSale: CreateSaleCommand = {
       customerId: 'customer-1',
+      channel: 'web',
       channelReference: 'big-order',
       items: [{ variantId: 'v1', quantity: 4, priceType: 'regular' }],
     };
 
     const smallSale: CreateSaleCommand = {
       customerId: 'customer-1',
+      channel: 'web',
       channelReference: 'small-order',
       items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
     };

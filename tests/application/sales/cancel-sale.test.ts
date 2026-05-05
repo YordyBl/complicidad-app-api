@@ -184,6 +184,7 @@ function createPopulatedSale(
     SaleIdEntity.from(saleId),
     'customer-1',
     'web-order-456',
+    'web',
     [line],
     'ACTIVE',
     new Date('2026-01-15'),
@@ -240,7 +241,7 @@ describe('CancelSaleUseCase', () => {
         SaleLineId.from('line-1'), 'v1', 10, Money.fromCents(2000), 'regular', [c],
       );
       const sale = new SaleEntity(
-        SaleIdEntity.from('sale-single'), 'customer-1', 'channel-1', [line], 'ACTIVE', new Date(), new Date(),
+        SaleIdEntity.from('sale-single'), 'customer-1', 'channel-1', 'web', [line], 'ACTIVE', new Date(), new Date(),
       );
       const lot = makeTestLot('lot-1', 'v1', 30, 20, 500);
 
@@ -323,7 +324,7 @@ describe('CancelSaleUseCase', () => {
         SaleLineId.from('line-1'), 'v1', 5, Money.fromCents(1000), 'regular', [c],
       );
       const sale = new SaleEntity(
-        SaleIdEntity.from('sale-fail'), 'customer-1', 'channel-1', [line], 'ACTIVE', new Date(), new Date(),
+        SaleIdEntity.from('sale-fail'), 'customer-1', 'channel-1', 'web', [line], 'ACTIVE', new Date(), new Date(),
       );
       saleRepo.sales.set('sale-fail', sale);
 
@@ -482,7 +483,7 @@ describe('ReturnFullSaleUseCase', () => {
         SaleLineId.from('line-1'), 'v1', 5, Money.fromCents(1000), 'regular', [c],
       );
       const sale = new SaleEntity(
-        SaleIdEntity.from('return-fail'), 'customer-1', 'channel-1', [line], 'ACTIVE', new Date(), new Date(),
+        SaleIdEntity.from('return-fail'), 'customer-1', 'channel-1', 'web', [line], 'ACTIVE', new Date(), new Date(),
       );
       saleRepo.sales.set('return-fail', sale);
 

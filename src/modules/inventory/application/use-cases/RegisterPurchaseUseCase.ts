@@ -38,19 +38,34 @@ export interface PurchaseScope extends UnitOfWorkScope {
 
 // ── DTOs ─────────────────────────────────────────────────────
 
-export interface RegisterPurchaseCommand {
+export interface RegisterPurchaseItem {
+  /** Variant identifier (UUID). */
   variantId: string;
+  /** Integer quantity of units purchased. */
   quantity: number;
   /** Unit cost in soles (e.g. 50.25). Converted to cents internally. */
   unitCost: number;
+}
+
+export interface RegisterPurchaseCommand {
+  /** One or more items in this purchase batch. */
+  items: RegisterPurchaseItem[];
   supplierId?: string;
   notes?: string;
   purchaseDate?: string; // ISO date string
 }
 
+export interface PurchaseLotResponse {
+  lotId: string;
+  variantId: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+}
+
 export interface RegisterPurchaseResponse {
   purchaseId: string;
-  lotId: string;
+  lots: PurchaseLotResponse[];
   totalCost: number; // in soles
 }
 
@@ -70,35 +85,39 @@ export class RegisterPurchaseUseCase {
   /**
    * Execute the purchase registration within a UnitOfWork.
    *
-   * The UnitOfWorkScope must conform to PurchaseScope, providing:
-   * - scope.inventoryLots (InventoryLotRepository)
-   * - scope.purchases (PurchaseRepository)
-   * - scope.cashLedger (CashLedgerRepository)
+   * Validates all items upfront — if any item is invalid the entire
+   * batch is rejected and nothing is persisted.
    */
   async execute(
     command: RegisterPurchaseCommand,
     uow: UnitOfWork,
   ): Promise<Result<RegisterPurchaseResponse>> {
     // ── Validate input ────────────────────────────────────
-    if (command.quantity <= 0) {
-      return err(new InvalidQuantityError('La cantidad debe ser positiva'));
-    }
-    if (command.unitCost < 0) {
-      return err(new InvalidQuantityError('El costo unitario no puede ser negativo'));
+    if (command.items.length === 0) {
+      return err(new InvalidQuantityError('La compra debe contener al menos un item'));
     }
 
-    // Convert soles to cents (internal representation)
-    const unitCostCents = Math.round(command.unitCost * 100);
+    for (const item of command.items) {
+      if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+        return err(new InvalidQuantityError('La cantidad debe ser un número entero positivo'));
+      }
+      if (item.unitCost < 0) {
+        return err(new InvalidQuantityError('El costo unitario no puede ser negativo'));
+      }
+    }
 
     // ── Execute in transaction ────────────────────────────
     return uow.run(async (baseScope) => {
       const scope = baseScope as PurchaseScope;
 
-      // 1. Validate variant exists
-      const variantId = VariantId.from(command.variantId);
-      const variant = await this.variantRepository.findById(variantId);
-      if (!variant) {
-        return err(new NotFoundError('Variant', command.variantId));
+      // 1. Validate all variants exist upfront (fail-fast)
+      for (const item of command.items) {
+        const variant = await this.variantRepository.findById(
+          VariantId.from(item.variantId),
+        );
+        if (!variant) {
+          return err(new NotFoundError('Variant', item.variantId));
+        }
       }
 
       // 2. Create purchase
@@ -116,25 +135,42 @@ export class RegisterPurchaseUseCase {
         now,
       );
 
-      // 3. Create FIFO lot
-      const lotId = PurchaseLotId.generate();
-      const lot = new PurchaseLot(
-        lotId,
-        variantId,
-        purchaseId,
-        command.quantity,
-        command.quantity,
-        Money.fromCents(unitCostCents),
-        purchaseDate,
-        command.supplierId ? SupplierId.from(command.supplierId) : null,
-      );
+      // 3. Create FIFO lots for each item + compute totals
+      const lots: PurchaseLot[] = [];
+      const lotResponses: PurchaseLotResponse[] = [];
+      let totalCents = 0;
 
-      // 4. Persist purchase and lot
+      for (const item of command.items) {
+        const unitCostCents = Math.round(item.unitCost * 100);
+        const lot = new PurchaseLot(
+          PurchaseLotId.generate(),
+          VariantId.from(item.variantId),
+          purchaseId,
+          item.quantity,
+          item.quantity,
+          Money.fromCents(unitCostCents),
+          purchaseDate,
+          command.supplierId ? SupplierId.from(command.supplierId) : null,
+        );
+        lots.push(lot);
+
+        const itemTotal = unitCostCents * item.quantity;
+        totalCents += itemTotal;
+        lotResponses.push({
+          lotId: lot.id.toString(),
+          variantId: item.variantId,
+          quantity: item.quantity,
+          unitCost: item.unitCost,
+          totalCost: itemTotal / 100,
+        });
+      }
+
+      // 4. Persist purchase and all lots
       await scope.purchases.save(purchase);
-      await scope.inventoryLots.save(lot);
+      await scope.inventoryLots.saveMany(lots);
 
-      // 5. Create cash ledger entry (negative outflow representing reinvestment)
-      const totalCost = Money.fromCents(unitCostCents).multiply(command.quantity);
+      // 5. Create single cash ledger entry (total outflow)
+      const totalCost = Money.fromCents(totalCents);
       const cashEntry = new CashLedgerEntry(
         CashLedgerEntryId.generate(),
         'PURCHASE_OUTFLOW',
@@ -147,7 +183,7 @@ export class RegisterPurchaseUseCase {
 
       return ok({
         purchaseId: purchaseId.toString(),
-        lotId: lotId.toString(),
+        lots: lotResponses,
         totalCost: totalCost.cents / 100,
       });
     });

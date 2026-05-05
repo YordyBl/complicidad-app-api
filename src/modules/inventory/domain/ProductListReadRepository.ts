@@ -33,6 +33,8 @@ export interface ProductVariantSummary {
   sku: string;
   attributes: Record<string, string>;
   isActive: boolean;
+  /** Available stock (sum of open lot remaining quantities). Always ≥ 0. */
+  stock: number;
 }
 
 /** Flat read model for a product in the listing context. */

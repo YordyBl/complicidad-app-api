@@ -10,6 +10,8 @@
  *   any mutations. No lot is consumed until every item passes checks.
  * - FIFO lot costing remains unchanged; reports/caja/profit use
  *   FIFO costs and sale snapshots.
+ * - Channel is validated against the closed SaleChannel catalog.
+ * - Quantities must be positive integers (non-integer rejected).
  *
  * Dependencies:
  * - CustomerRepository: validates customer exists
@@ -32,7 +34,8 @@ import type { VariantRepository } from '../../../inventory/domain/VariantReposit
 import type { ProductRepository } from '../../../inventory/domain/ProductRepository.js';
 import { CustomerId } from '../../../customers/domain/CustomerId.js';
 import { VariantId } from '../../../inventory/domain/VariantId.js';
-import { Sale } from '../../domain/Sale.js';
+import { Sale, SALE_CHANNELS } from '../../domain/Sale.js';
+import type { SaleChannel } from '../../domain/Sale.js';
 import { SaleId } from '../../domain/SaleId.js';
 import { SaleLine, type PriceType } from '../../domain/SaleLine.js';
 import { SaleLineId } from '../../domain/SaleLineId.js';
@@ -65,6 +68,7 @@ export interface SaleItemCommand {
 
 export interface CreateSaleCommand {
   customerId: string;
+  channel: SaleChannel;
   channelReference: string;
   items: SaleItemCommand[];
 }
@@ -86,6 +90,14 @@ export class MissingChannelReferenceError extends BusinessRuleError {
 
   constructor() {
     super('La referencia de canal es obligatoria');
+  }
+}
+
+export class InvalidChannelError extends BusinessRuleError {
+  override readonly name = 'InvalidChannelError' as const;
+
+  constructor(got: string) {
+    super(`Canal inválido: "${got}". Debe ser uno de: ${SALE_CHANNELS.join(', ')}`);
   }
 }
 
@@ -148,6 +160,10 @@ export class CreateSaleUseCase {
     uow: UnitOfWork,
   ): Promise<Result<CreateSaleResponse>> {
     // ── Validate command inputs ────────────────────────────
+    if (!SALE_CHANNELS.includes(command.channel)) {
+      return err(new InvalidChannelError(command.channel));
+    }
+
     if (!command.channelReference || command.channelReference.trim().length === 0) {
       return err(new MissingChannelReferenceError());
     }
@@ -159,6 +175,9 @@ export class CreateSaleUseCase {
     for (const item of command.items) {
       if (item.quantity <= 0) {
         return err(new InvalidQuantityError('La cantidad del ítem debe ser positiva'));
+      }
+      if (!Number.isInteger(item.quantity)) {
+        return err(new InvalidQuantityError('La cantidad del ítem debe ser un número entero'));
       }
       if (!VALID_PRICE_TYPES.has(item.priceType)) {
         return err(new InvalidPriceTypeError(item.priceType));
@@ -261,6 +280,7 @@ export class CreateSaleUseCase {
         saleId,
         command.customerId,
         command.channelReference.trim(),
+        command.channel,
         lines,
         'ACTIVE',
         now,
