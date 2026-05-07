@@ -144,18 +144,18 @@ describe('Sale domain — FIFO consumption calculations', () => {
   });
 
   describe('sale invariants', () => {
-    it('rejects sale with empty channel reference', () => {
+    it('accepts sale without channel reference', () => {
       const line = makeLine('l1', 'v1', 1, 1000, []);
-      expect(
-        () => new Sale(SaleId.generate(), CUSTOMER_ID, '', CHANNEL, [line], 'ACTIVE', SALE_DATE, SALE_DATE),
-      ).toThrow('La referencia de canal es obligatoria');
+      const sale = new Sale(SaleId.generate(), CUSTOMER_ID, undefined, CHANNEL, [line], 'ACTIVE', SALE_DATE, SALE_DATE);
+      expect(sale.channelReference).toBeUndefined();
+      expect(sale.channel).toBe('web');
+      expect(sale.status).toBe('ACTIVE');
     });
 
-    it('rejects sale with whitespace-only channel reference', () => {
+    it('accepts sale with empty string channel reference as defined (empty string)', () => {
       const line = makeLine('l1', 'v1', 1, 1000, []);
-      expect(
-        () => new Sale(SaleId.generate(), CUSTOMER_ID, '   ', CHANNEL, [line], 'ACTIVE', SALE_DATE, SALE_DATE),
-      ).toThrow('La referencia de canal es obligatoria');
+      const sale = new Sale(SaleId.generate(), CUSTOMER_ID, '', CHANNEL, [line], 'ACTIVE', SALE_DATE, SALE_DATE);
+      expect(sale.channelReference).toBe('');
     });
 
     it('rejects sale with no lines', () => {

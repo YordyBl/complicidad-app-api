@@ -38,6 +38,10 @@ class FakeProductListReadRepository implements ProductListReadRepository {
     this.lastQuery = query;
     return this.nextResult;
   }
+
+  async getProductById(_id: string): Promise<ProductListItem | null> {
+    return null;
+  }
 }
 
 // ── Helpers ──────────────────────────────────────────────────

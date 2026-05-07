@@ -8,6 +8,7 @@ import type { Request, Response } from 'express';
 import type { CreateProductUseCase } from '../../application/use-cases/CreateProductUseCase.js';
 import type { SearchItemUseCase } from '../../application/use-cases/SearchItemUseCase.js';
 import type { ListProductsUseCase } from '../../application/use-cases/ListProductsUseCase.js';
+import type { GetProductByIdUseCase } from '../../application/use-cases/GetProductByIdUseCase.js';
 import {
   VALID_STATUSES,
   VALID_SORT_BY,
@@ -21,6 +22,7 @@ export class ProductController {
     private readonly createProductUseCase: CreateProductUseCase,
     private readonly searchItemUseCase?: SearchItemUseCase,
     private readonly listProductsUseCase?: ListProductsUseCase,
+    private readonly getProductByIdUseCase?: GetProductByIdUseCase,
   ) {}
 
   /**
@@ -184,5 +186,42 @@ export class ProductController {
       data: result.items,
       meta: result.meta,
     });
+  }
+
+  /**
+   * GET /products/:id — get a single product by its ID.
+   *
+   * Returns 200 with the product detail or 404 if not found.
+   * Returns 503 if the use case is not wired (no database connection).
+   */
+  async getById(req: Request, res: Response): Promise<void> {
+    if (!this.getProductByIdUseCase) {
+      res.status(503).json({
+        error: 'ServiceUnavailable',
+        message: 'El detalle de producto no está disponible',
+      });
+      return;
+    }
+
+    const id = req.params.id;
+    if (typeof id !== 'string' || id.length === 0) {
+      res.status(400).json({
+        error: 'ValidationError',
+        message: 'El parámetro id es obligatorio',
+      });
+      return;
+    }
+
+    const product = await this.getProductByIdUseCase.execute(id);
+
+    if (!product) {
+      res.status(404).json({
+        error: 'NotFound',
+        message: `Producto con id ${id} no encontrado`,
+      });
+      return;
+    }
+
+    res.status(200).json(product);
   }
 }

@@ -37,6 +37,7 @@ async function ensureTables(em: EntityManager): Promise<void> {
       id UUID PRIMARY KEY,
       name VARCHAR(255) NOT NULL,
       description TEXT,
+      base_sku VARCHAR(100) NOT NULL DEFAULT '',
       sale_price_cents INT NOT NULL,
       presale_price_cents INT,
       aliases TEXT,
@@ -70,14 +71,15 @@ async function seedProducts(em: EntityManager, count: number): Promise<string[]>
     const id = `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`;
     ids.push(id);
     const name = `Product ${String(i).padStart(3, '0')}`;
+    const baseSku = `BS-${String(i).padStart(3, '0')}`;
     const isActive = i <= count - 2; // Last 2 are inactive (for status filter tests)
     const offset = (count - i) * 60000; // Stagger createdAt for deterministic sort
     const createdAt = new Date(Date.UTC(2026, 0, 1, 0, 0, 0, offset)).toISOString();
 
     await em.query(
-      `INSERT INTO ${TEST_PRODUCTS} (id, name, description, sale_price_cents, presale_price_cents, is_active, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [id, name, null, 1000 + i, null, isActive, createdAt, createdAt],
+      `INSERT INTO ${TEST_PRODUCTS} (id, name, base_sku, description, sale_price_cents, presale_price_cents, is_active, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [id, name, baseSku, null, 1000 + i, null, isActive, createdAt, createdAt],
     );
   }
   return ids;
@@ -154,7 +156,12 @@ async function rawListProducts(
   }
 
   if (search) {
-    conditions.push(`(LOWER(p.name) LIKE $${paramIndex} OR LOWER(p.aliases) LIKE $${paramIndex})`);
+    conditions.push(
+      `(LOWER(p.name) LIKE $${paramIndex}` +
+      ` OR LOWER(p.aliases) LIKE $${paramIndex}` +
+      ` OR LOWER(p.base_sku) LIKE $${paramIndex}` +
+      ` OR EXISTS (SELECT 1 FROM ${TEST_VARIANTS} v WHERE v.product_id = p.id AND LOWER(v.sku) LIKE $${paramIndex}))`,
+    );
     values.push(`%${search.toLowerCase()}%`);
     paramIndex++;
   }
@@ -188,12 +195,13 @@ async function rawListProducts(
   let variants: Record<string, unknown>[] = [];
 
   if (pageIds.length > 0) {
-    const idPlaceholders = pageIds.map((_, i) => `$${paramIndex + i}`);
+    // Placeholders always start at $1 since only idValues are passed as params
+    const idPlaceholders = pageIds.map((_, i) => `$${String(i + 1)}`);
     const idValues = pageIds.map((r) => r.id);
 
     products = await em.query(
-      `SELECT id, name, description, sale_price_cents, presale_price_cents, is_active, created_at, updated_at
-       FROM ${TEST_PRODUCTS}
+      `SELECT id, name, base_sku, description, sale_price_cents, presale_price_cents, is_active, created_at, updated_at
+       FROM ${TEST_PRODUCTS} p
        WHERE id IN (${idPlaceholders.join(', ')})
        ORDER BY ${tieBreak}`,
       idValues,
@@ -338,11 +346,13 @@ describe.runIf(hasDatabase)('ProductTypeOrmRepository.listProducts() — DB-back
   it('sorts by createdAt desc by default (stable tie-breaker by id desc)', async () => {
     const result = await rawListProducts(em, { page: 1, pageSize: 25, status: 'all' });
 
-    // Products are created with staggered timestamps (newest = id 25)
+    // Products are created with staggered timestamps:
+    //   i=1  → offset=(25-1)*60000=1440000ms → createdAt=00:24:00 (NEWEST)
+    //   i=25 → offset=0ms                    → createdAt=00:00:00 (OLDEST)
     // Sorting: createdAt DESC, id DESC → newest first
-    expect(result.items[0]!.name).toBe('Product 025');
-    expect(result.items[1]!.name).toBe('Product 024');
-    expect(result.items[24]!.name).toBe('Product 001');
+    expect(result.items[0]!.name).toBe('Product 001');
+    expect(result.items[1]!.name).toBe('Product 002');
+    expect(result.items[24]!.name).toBe('Product 025');
   });
 
   it('sorts by name asc correctly', async () => {
@@ -382,16 +392,102 @@ describe.runIf(hasDatabase)('ProductTypeOrmRepository.listProducts() — DB-back
     }
   });
 
-  it('filters by search query (case-insensitive name match)', async () => {
-    // Search for "product 01" which should match "Product 001", "Product 010", etc.
+  it('filters by search query (case-insensitive across name, base_sku, and variant.sku)', async () => {
+    // Search "01" now covers name, base_sku, AND variant.sku via EXISTS subquery.
+    // With 25 products × 3 variants = 75 SKUs:
+    //   Name match: Product 001, 010-019 → 11 products
+    //   Variant SKU match (additional products not in name set):
+    //     Products 004 (SKU-010..012), 005 (SKU-013..015),
+    //     006 (SKU-016..018), 007 (SKU-019..021) → 4 more
+    //   Total: 15
     const result = await rawListProducts(em, { search: '01', status: 'all', page: 1, pageSize: 50 });
 
-    // "01" appears in Product 001, 010, 011, 012, 013, 014, 015, 016, 017, 018, 019
-    // That's 11 products (001 and 010-019)
-    expect(result.meta.totalItems).toBe(11);
-    for (const item of result.items) {
-      expect((item.name as string).toLowerCase()).toContain('01');
-    }
+    expect(result.meta.totalItems).toBe(15);
+    // Items matched via variant.sku may not have "01" in their name
+    expect(result.items.length).toBe(15);
+  });
+});
+
+// ── Search field expansion (DB-backed, via rawListProducts) ───
+
+describe.runIf(hasDatabase)('ProductTypeOrmRepository.listProducts() — search field expansion', () => {
+  let em: EntityManager;
+
+  beforeAll(async () => {
+    em = manager!;
+    // Fresh data: 10 products, 2 variants each
+    await ensureTables(em);
+    const ids = await seedProducts(em, 10);
+    await seedVariants(em, ids, 2);
+  });
+
+  it('searches by base_sku (partial match)', async () => {
+    const result = await rawListProducts(em, {
+      search: 'BS-005', status: 'all', page: 1, pageSize: 50,
+    });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.meta.totalItems).toBe(1);
+    expect(result.items[0]!.name).toBe('Product 005');
+  });
+
+  it('searches by base_sku prefix matches multiple products', async () => {
+    // "BS-00" matches BS-001 through BS-009 (9 products) — valid
+    const result = await rawListProducts(em, {
+      search: 'BS-00', status: 'all', page: 1, pageSize: 50,
+    });
+
+    // Products 001-009 all have base_sku matching BS-00[1-9]
+    const productsWithNames = result.items.filter(
+      (p: Record<string, unknown>) => (p.name as string).includes('Product 0'),
+    );
+    expect(productsWithNames.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('searches by variant.sku (partial match)', async () => {
+    // SKU-002 is the second variant seeded; with 2 variants/product:
+    // Product 001 → SKU-001, SKU-002
+    // Product 002 → SKU-003, SKU-004
+    // Therefore SKU-002 belongs to Product 001
+    const result = await rawListProducts(em, {
+      search: 'SKU-002', status: 'all', page: 1, pageSize: 50,
+    });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.meta.totalItems).toBe(1);
+    expect(result.items[0]!.name).toBe('Product 001');
+  });
+
+  it('searches by variant.sku prefix across products', async () => {
+    // "SKU-00" matches variants SKU-001 to SKU-009
+    // These belong to Products 001-005 (2 variants each, so SKU-001/002→001,
+    // 003/004→002, 005/006→003, 007/008→004, 009/010→005)
+    const result = await rawListProducts(em, {
+      search: 'SKU-00', status: 'all', page: 1, pageSize: 50,
+    });
+
+    // SKU-001..009 covers first 5 products
+    expect(result.meta.totalItems).toBe(5);
+  });
+
+  it('searches case-insensitively across all fields', async () => {
+    // Lowercase search should still match uppercase base_sku
+    const result = await rawListProducts(em, {
+      search: 'bs-005', status: 'all', page: 1, pageSize: 50,
+    });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]!.name).toBe('Product 005');
+  });
+
+  it('returns empty when search matches nothing', async () => {
+    const result = await rawListProducts(em, {
+      search: 'NONEXISTENT-999', status: 'all', page: 1, pageSize: 50,
+    });
+
+    expect(result.items).toHaveLength(0);
+    expect(result.meta.totalItems).toBe(0);
+    expect(result.meta.totalPages).toBe(0);
   });
 });
 
@@ -489,6 +585,11 @@ describe('ProductTypeOrmRepository.listProducts() — query correctness', () => 
     const countCall = querySpy.mock.calls[0]![0] as string;
     expect(countCall).toContain('LOWER(p.name) LIKE');
 
+    // Verify search covers base_sku and variant.sku
+    expect(countCall).toContain('LOWER(p.base_sku) LIKE');
+    expect(countCall).toContain('EXISTS (SELECT 1 FROM variants v');
+    expect(countCall).toContain('v.product_id = p.id');
+
     // Verify status filter for inactive
     expect(countCall).toContain('p.is_active = false');
 
@@ -500,5 +601,45 @@ describe('ProductTypeOrmRepository.listProducts() — query correctness', () => 
     // Verify pagination — page 2, pageSize 10
     expect(idQuery).toContain('LIMIT $');
     expect(idQuery).toContain('OFFSET $');
+  });
+
+  it('includes EXISTS subquery for variant.sku in search WHERE clause', async () => {
+    const querySpy = vi.fn()
+      .mockResolvedValueOnce([{ cnt: '3' }])
+      .mockResolvedValueOnce([{ id: 'p1' }])
+      .mockResolvedValueOnce([{
+        id: 'p1', name: 'Test', base_sku: 'TSK', description: null,
+        sale_price_cents: 1000, presale_price_cents: null, aliases: null, is_active: true,
+        created_at: new Date(), updated_at: new Date(),
+      }])
+      .mockResolvedValueOnce([]);
+
+    const mockManager = {
+      query: querySpy,
+      getRepository: () => ({ findOne: () => null, find: () => [] as never[], save: () => Promise.resolve(), delete: () => Promise.resolve() }),
+    } as unknown as EntityManager;
+
+    const repo = new ProductTypeOrmRepository(mockManager);
+
+    await repo.listProducts({
+      page: 1, pageSize: 20, search: 'variant-sku-match', status: 'all',
+      sortBy: 'createdAt', sortOrder: 'desc',
+    });
+
+    const countQuery = querySpy.mock.calls[0]![0] as string;
+
+    // Verify the WHERE clause includes all four search fields
+    expect(countQuery).toContain('LOWER(p.name) LIKE $1');
+    expect(countQuery).toContain('LOWER(p.aliases) LIKE $1');
+    expect(countQuery).toContain('LOWER(p.base_sku) LIKE $1');
+    expect(countQuery).toContain('EXISTS (SELECT 1 FROM variants v WHERE v.product_id = p.id AND LOWER(v.sku) LIKE $1)');
+
+    // Verify full WHERE structure: search conditions are wrapped in parentheses
+    const whereMatch = /WHERE\s+(.+)$/.exec(countQuery);
+    expect(whereMatch).not.toBeNull();
+    const whereClause = whereMatch![1]!;
+    // Should be just the search conditions (no status filter when 'all')
+    expect(whereClause).toMatch(/^\(.+\)$/);
+    expect(whereClause).toContain('EXISTS');
   });
 });

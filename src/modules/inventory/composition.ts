@@ -14,6 +14,7 @@ import { CreateProductUseCase } from './application/use-cases/CreateProductUseCa
 import { SearchItemUseCase } from './application/use-cases/SearchItemUseCase.js';
 import { RegisterPurchaseUseCase } from './application/use-cases/RegisterPurchaseUseCase.js';
 import { ListProductsUseCase } from './application/use-cases/ListProductsUseCase.js';
+import { GetProductByIdUseCase } from './application/use-cases/GetProductByIdUseCase.js';
 import { ProductController } from './interfaces/http/ProductController.js';
 import { InventoryController } from './interfaces/http/InventoryController.js';
 import { createInventoryRouter } from './interfaces/http/inventory-routes.js';
@@ -46,9 +47,10 @@ export function createInventoryModule(manager?: EntityManager, uow?: UnitOfWork)
   const searchItemUseCase = new SearchItemUseCase(variantRepo, productRepo, lotRepo);
   const registerPurchaseUseCase = new RegisterPurchaseUseCase(variantRepo);
   const listProductsUseCase = new ListProductsUseCase(productRepo);
+  const getProductByIdUseCase = new GetProductByIdUseCase(productRepo);
 
   // HTTP controllers
-  const productController = new ProductController(createProductUseCase, searchItemUseCase, listProductsUseCase);
+  const productController = new ProductController(createProductUseCase, searchItemUseCase, listProductsUseCase, getProductByIdUseCase);
   const inventoryController = new InventoryController(registerPurchaseUseCase, uow);
 
   return createInventoryRouter(productController, inventoryController);

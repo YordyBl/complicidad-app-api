@@ -13,7 +13,7 @@
  * - Integer quantity validation
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CreateSaleUseCase, MissingChannelReferenceError, InvalidChannelError, InvalidQuantityError } from '../../../src/modules/sales-returns/application/use-cases/CreateSaleUseCase.js';
+import { CreateSaleUseCase, InvalidChannelError, InvalidQuantityError } from '../../../src/modules/sales-returns/application/use-cases/CreateSaleUseCase.js';
 import type { CreateSaleCommand } from '../../../src/modules/sales-returns/application/use-cases/CreateSaleUseCase.js';
 import type { UnitOfWork, UnitOfWorkScope } from '../../../src/shared/application/UnitOfWork.js';
 import type { CustomerRepository } from '../../../src/modules/customers/domain/CustomerRepository.js';
@@ -470,39 +470,47 @@ describe('CreateSaleUseCase', () => {
     });
   });
 
-  // ── Required channel reference ─────────────────────────────
+  // ── Optional channel reference ─────────────────────────────
 
-  describe('required channel reference', () => {
-    it('rejects sale with empty channel reference', async () => {
+  describe('optional channel reference', () => {
+    it('accepts sale without channelReference', async () => {
       lotRepo.lots.set('lot-1', createTestLot('lot-1', 'v1', 10, 500, new Date('2026-01-01')));
 
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
         channel: 'web',
-        channelReference: '',
         items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
       };
 
       const result = await useCase.execute(command, createUow());
 
-      expect(result.ok).toBe(false);
-      if (result.ok) return;
-      expect(result.error).toBeInstanceOf(MissingChannelReferenceError);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // Verify sale was persisted (channelReference omitted)
+      expect(saleRepo.sales.size).toBe(1);
+      const persistedSale = Array.from(saleRepo.sales.values())[0]!;
+      expect(persistedSale.channelReference).toBeUndefined();
+      expect(persistedSale.channel).toBe('web');
     });
 
-    it('rejects sale with whitespace-only channel reference', async () => {
+    it('still accepts sale with channelReference for backward compatibility', async () => {
+      lotRepo.lots.set('lot-1', createTestLot('lot-1', 'v1', 10, 500, new Date('2026-01-01')));
+
       const command: CreateSaleCommand = {
         customerId: 'customer-1',
         channel: 'web',
-        channelReference: '   ',
+        channelReference: 'shopify-order-789',
         items: [{ variantId: 'v1', quantity: 1, priceType: 'regular' }],
       };
 
       const result = await useCase.execute(command, createUow());
 
-      expect(result.ok).toBe(false);
-      if (result.ok) return;
-      expect(result.error).toBeInstanceOf(MissingChannelReferenceError);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const persistedSale = Array.from(saleRepo.sales.values())[0]!;
+      expect(persistedSale.channelReference).toBe('shopify-order-789');
     });
   });
 

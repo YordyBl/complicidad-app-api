@@ -12,8 +12,8 @@ export class SaleEntity extends BaseEntity {
   @Column({ name: 'customer_id', type: 'uuid' })
   customerId!: string;
 
-  @Column({ name: 'channel_reference', type: 'varchar', length: 255 })
-  channelReference!: string;
+  @Column({ name: 'channel_reference', type: 'varchar', length: 255, nullable: true })
+  channelReference!: string | null;
 
   @Column({ type: 'varchar', length: 20, default: 'web' })
   channel!: string;

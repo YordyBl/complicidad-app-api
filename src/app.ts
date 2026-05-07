@@ -1,4 +1,6 @@
 import express, { type Express, json, type Router } from 'express';
+import swaggerUi from 'swagger-ui-express';
+import swaggerJsdoc from 'swagger-jsdoc';
 import { requestLogger, errorMiddleware } from './infrastructure/http/index.js';
 import { env } from './config/env.js';
 
@@ -66,6 +68,37 @@ export function createApp(...routers: Router[]): Express {
   app.use(corsMiddleware);
   app.use(json());
   app.use(requestLogger);
+
+  // --- Swagger / OpenAPI docs ---
+  const swaggerOptions = {
+    definition: {
+      openapi: '3.0.0',
+      info: {
+        title: 'Complicidad API',
+        version: '1.0.0',
+        description: 'Internal REST API for auditable employees, inventory, sales, customers, cash, and reports',
+      },
+      servers: [
+        { url: 'http://localhost:3000', description: 'Local development' },
+      ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+          },
+        },
+      },
+      security: [{ bearerAuth: [] }],
+    },
+    apis: ['./src/**/*routes.ts'],
+  };
+  const swaggerSpec = swaggerJsdoc(swaggerOptions);
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  app.get('/api-docs.json', (_req, res) => {
+    res.json(swaggerSpec);
+  });
 
   // --- Health check (no auth) ---
   app.get('/health', (_req, res) => {

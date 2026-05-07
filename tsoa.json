@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/tsoa/schema.json",
+  "entryFile": "src/swagger.ts",
+  "spec": {
+    "outputDirectory": "./dist",
+    "specVersion": 3,
+    "securityDefinitions": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "noImplicitAdditionalProperties": "throw-on-extras"
+}

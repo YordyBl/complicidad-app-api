@@ -44,10 +44,6 @@ export class SaleController {
       res.status(400).json({ error: 'ValidationError', message: 'customerId es obligatorio y debe ser un string' });
       return;
     }
-    if (typeof channelReference !== 'string') {
-      res.status(400).json({ error: 'ValidationError', message: 'channelReference es obligatorio y debe ser un string' });
-      return;
-    }
     if (typeof channel !== 'string' || !SALE_CHANNELS.includes(channel as SaleChannel)) {
       res.status(400).json({
         error: 'ValidationError',
@@ -86,7 +82,7 @@ export class SaleController {
       {
         customerId,
         channel: channel as SaleChannel,
-        channelReference,
+        ...(typeof channelReference === 'string' ? { channelReference } : {}),
         items: parsedItems as Parameters<typeof this.createSaleUseCase.execute>[0]['items'],
       },
       this.uow,

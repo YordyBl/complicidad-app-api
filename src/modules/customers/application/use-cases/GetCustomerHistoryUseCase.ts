@@ -39,7 +39,8 @@ export interface GetCustomerHistoryCommand {
 
 export interface CustomerSaleSummary {
   saleId: string;
-  channelReference: string;
+  channelReference: string | null;
+  channel: string;
   status: 'ACTIVE' | 'CANCELLED' | 'RETURNED';
   totalRevenueCents: number;
   totalCostCents: number;
@@ -111,7 +112,8 @@ export class GetCustomerHistoryUseCase {
       // ── Derive sale summaries ──────────────────────────────
       const saleSummaries: CustomerSaleSummary[] = sales.map((sale) => ({
         saleId: sale.id.toString(),
-        channelReference: sale.channelReference,
+        channelReference: sale.channelReference ?? null,
+        channel: sale.channel,
         status: sale.status,
         totalRevenueCents: sale.totalRevenue.cents,
         totalCostCents: sale.totalCost.cents,

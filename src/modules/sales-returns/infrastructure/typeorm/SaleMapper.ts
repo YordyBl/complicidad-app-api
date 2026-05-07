@@ -47,7 +47,7 @@ export class SaleMapper implements BaseMapper<Sale, SaleEntity> {
     return new Sale(
       SaleId.from(entity.id),
       entity.customerId,
-      entity.channelReference,
+      entity.channelReference ?? undefined,
       channel,
       lines,
       entity.status as 'ACTIVE' | 'CANCELLED' | 'RETURNED',
@@ -60,7 +60,7 @@ export class SaleMapper implements BaseMapper<Sale, SaleEntity> {
     const entity = new SaleEntity();
     entity.id = domain.id.toString();
     entity.customerId = domain.customerId;
-    entity.channelReference = domain.channelReference;
+    entity.channelReference = domain.channelReference ?? null;
     entity.channel = domain.channel;
     entity.status = domain.status;
 

@@ -4,7 +4,7 @@
  * A Sale represents a transaction with a customer. It requires:
  * - A customer (by ID)
  * - A channel (closed catalog: tiktok | facebook | whatsapp | web | instagram)
- * - A channel reference (platform/order link)
+ * - An optional channel reference (platform/order link) for historical compatibility
  * - At least one sale line
  *
  * Each line tracks its own FIFO lot consumptions for audit trail.
@@ -35,7 +35,7 @@ export class Sale {
   constructor(
     private readonly _id: SaleId,
     private readonly _customerId: string,
-    private readonly _channelReference: string,
+    private readonly _channelReference: string | undefined,
     private readonly _channel: SaleChannel,
     private _lines: SaleLine[],
     private _status: SaleStatus,
@@ -43,9 +43,6 @@ export class Sale {
     private _updatedAt: Date,
   ) {
     // ── Invariants ──────────────────────────────────────────
-    if (!_channelReference || _channelReference.trim().length === 0) {
-      throw new BusinessRuleError('La referencia de canal es obligatoria');
-    }
     if (!SALE_CHANNELS.includes(_channel)) {
       throw new BusinessRuleError(
         `Canal inválido: "${_channel}". Debe ser uno de: ${SALE_CHANNELS.join(', ')}`,
@@ -69,7 +66,7 @@ export class Sale {
     return this._customerId;
   }
 
-  get channelReference(): string {
+  get channelReference(): string | undefined {
     return this._channelReference;
   }
 
@@ -143,6 +140,6 @@ export class Sale {
   }
 
   toString(): string {
-    return `Sale(id=${this._id.toString()}, customer=${this._customerId}, channel=${this._channel}, channelRef=${this._channelReference}, status=${this._status}, revenue=${this.totalRevenue.toString()}, profit=${this.grossProfit.toString()})`;
+    return `Sale(id=${this._id.toString()}, customer=${this._customerId}, channel=${this._channel}, channelRef=${this._channelReference ?? '(none)'}, status=${this._status}, revenue=${this.totalRevenue.toString()}, profit=${this.grossProfit.toString()})`;
   }
 }

@@ -39,7 +39,7 @@ export interface SaleDetailLine {
 export interface SaleDetailResponse {
   id: string;
   customerId: string;
-  channelReference: string;
+  channelReference: string | null;
   channel: string;
   status: string;
   totalRevenueCents: number;
@@ -70,7 +70,7 @@ export class GetSaleDetailUseCase {
     return {
       id: sale.id.toString(),
       customerId: sale.customerId,
-      channelReference: sale.channelReference,
+      channelReference: sale.channelReference ?? null,
       channel: sale.channel,
       status: sale.status,
       totalRevenueCents: sale.totalRevenue.cents,

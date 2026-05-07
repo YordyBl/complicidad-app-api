@@ -6,3 +6,4 @@ export type { RegisterPurchaseCommand, RegisterPurchaseResponse, RegisterPurchas
 export { InvalidQuantityError } from './use-cases/RegisterPurchaseUseCase.js';
 export { ListProductsUseCase } from './use-cases/ListProductsUseCase.js';
 export type { ListProductsInput } from './use-cases/ListProductsUseCase.js';
+export { GetProductByIdUseCase } from './use-cases/GetProductByIdUseCase.js';

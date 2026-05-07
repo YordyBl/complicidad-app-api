@@ -69,7 +69,7 @@ export interface SaleItemCommand {
 export interface CreateSaleCommand {
   customerId: string;
   channel: SaleChannel;
-  channelReference: string;
+  channelReference?: string;
   items: SaleItemCommand[];
 }
 
@@ -84,14 +84,6 @@ export interface CreateSaleResponse {
 }
 
 // ── Errors ───────────────────────────────────────────────────
-
-export class MissingChannelReferenceError extends BusinessRuleError {
-  override readonly name = 'MissingChannelReferenceError' as const;
-
-  constructor() {
-    super('La referencia de canal es obligatoria');
-  }
-}
 
 export class InvalidChannelError extends BusinessRuleError {
   override readonly name = 'InvalidChannelError' as const;
@@ -162,10 +154,6 @@ export class CreateSaleUseCase {
     // ── Validate command inputs ────────────────────────────
     if (!SALE_CHANNELS.includes(command.channel)) {
       return err(new InvalidChannelError(command.channel));
-    }
-
-    if (!command.channelReference || command.channelReference.trim().length === 0) {
-      return err(new MissingChannelReferenceError());
     }
 
     if (command.items.length === 0) {
@@ -279,7 +267,8 @@ export class CreateSaleUseCase {
       const sale = new Sale(
         saleId,
         command.customerId,
-        command.channelReference.trim(),
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional: converts falsy (empty string) to undefined
+        command.channelReference?.trim() || undefined,
         command.channel,
         lines,
         'ACTIVE',

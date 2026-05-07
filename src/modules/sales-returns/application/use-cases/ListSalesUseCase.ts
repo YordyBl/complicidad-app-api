@@ -12,7 +12,7 @@ import type { Sale } from '../../domain/Sale.js';
 export interface SaleSummary {
   saleId: string;
   customerId: string;
-  channelReference: string;
+  channelReference: string | null;
   channel: string;
   status: string;
   totalRevenueCents: number;
@@ -77,7 +77,7 @@ export class ListSalesUseCase {
     return {
       saleId: sale.id.toString(),
       customerId: sale.customerId,
-      channelReference: sale.channelReference,
+      channelReference: sale.channelReference ?? null,
       channel: sale.channel,
       status: sale.status,
       totalRevenueCents: sale.totalRevenue.cents,

@@ -126,7 +126,7 @@ function makeSaleLine(
 function createSale(
   id: string,
   customerId: string,
-  channelReference: string,
+  channelReference: string | undefined,
   status: 'ACTIVE' | 'CANCELLED' | 'RETURNED',
   lines: SaleLine[],
   createdAt: Date,
@@ -276,14 +276,43 @@ describe('GetCustomerHistoryUseCase', () => {
       const sale1 = result.value.sales.find((s) => s.saleId === 's-1')!;
       expect(sale1.status).toBe('ACTIVE');
       expect(sale1.totalRevenueCents).toBe(4000);
+      expect(sale1.channel).toBe('web');
+      expect(sale1.channelReference).toBe('shopify-1');
 
       const sale2 = result.value.sales.find((s) => s.saleId === 's-2')!;
       expect(sale2.status).toBe('CANCELLED');
       expect(sale2.totalRevenueCents).toBe(3000);
+      expect(sale2.channel).toBe('web');
 
       const sale3 = result.value.sales.find((s) => s.saleId === 's-3')!;
       expect(sale3.status).toBe('RETURNED');
       expect(sale3.totalRevenueCents).toBe(4500);
+      expect(sale3.channel).toBe('web');
+    });
+  });
+
+  // ── ChannelReference optional ────────────────────────────
+
+  describe('channelReference in history', () => {
+    it('returns channelReference as null for sale created without one', async () => {
+      const baseDate = new Date('2026-01-01');
+      const line = makeSaleLine('line-1', 'v1', 2, 2000, 800);
+
+      saleRepo.sales.set('s-1', createSale('s-1', 'cust-1', undefined, 'ACTIVE', [line], baseDate));
+      saleRepo.sales.set('s-2', createSale('s-2', 'cust-1', 'shopify-ref', 'ACTIVE', [line], baseDate));
+
+      const result = await useCase.execute({ customerId: 'cust-1' }, createUow());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const saleWithoutRef = result.value.sales.find((s) => s.saleId === 's-1')!;
+      expect(saleWithoutRef.channelReference).toBeNull();
+      expect(saleWithoutRef.channel).toBe('web');
+
+      const saleWithRef = result.value.sales.find((s) => s.saleId === 's-2')!;
+      expect(saleWithRef.channelReference).toBe('shopify-ref');
+      expect(saleWithRef.channel).toBe('web');
     });
   });
 

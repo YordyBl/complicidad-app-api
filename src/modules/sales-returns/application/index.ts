@@ -5,7 +5,6 @@ export type {
   SaleItemCommand,
 } from './use-cases/CreateSaleUseCase.js';
 export {
-  MissingChannelReferenceError,
   InvalidChannelError,
   EmptySaleError,
   InvalidQuantityError,

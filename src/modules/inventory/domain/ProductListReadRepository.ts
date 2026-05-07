@@ -92,4 +92,11 @@ export interface ProductListReadRepository {
    * and MUST NOT load all products then slice in memory.
    */
   listProducts(query: ListProductsQuery): Promise<ListProductsResult>;
+
+  /**
+   * Find a single product by its ID, returning the full detail read model.
+   *
+   * Returns null when the product does not exist.
+   */
+  getProductById(id: string): Promise<ProductListItem | null>;
 }

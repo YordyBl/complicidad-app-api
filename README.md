@@ -229,6 +229,8 @@ All application endpoints are mounted under `/api/v1`.
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/api/v1/products` | Create a new product with its first variant |
+| `GET` | `/api/v1/products` | List products with search & pagination (`?search=`, `?status=`, `?page=`, `?pageSize=`) |
+| `GET` | `/api/v1/products/:id` | Get product detail by canonical ID (200 / 404) |
 | `GET` | `/api/v1/items/search?term=...` | Search items by SKU or alias |
 | `POST` | `/api/v1/purchases` | Register a stock purchase (creates FIFO lots + cash outflow) |
 
@@ -236,7 +238,9 @@ All application endpoints are mounted under `/api/v1`.
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/v1/sales` | Create a multi-item sale (FIFO consumption + cash income) |
+| `GET` | `/api/v1/sales` | List sales with optional filters (`?customerId=`, `?status=`, `?dateFrom=`, `?dateTo=`, `?sortOrder=`) |
+| `GET` | `/api/v1/sales/:id` | Get sale detail by ID (200 / 400 / 404) |
+| `POST` | `/api/v1/sales` | Create a multi-item sale (FIFO consumption + cash income). `channel` is required; `channelReference` is optional/deprecated. |
 | `POST` | `/api/v1/sales/:id/cancel` | Cancel an active sale (restores lots + reverses cash) |
 | `POST` | `/api/v1/sales/:id/return` | Full return of an active sale (restores lots + return outflow) |
 
@@ -364,6 +368,17 @@ behaviour.
 
 ## Deferred / Future Work
 
+### Auth / RBAC (Critical)
+
+- **No backend auth/RBAC middleware** — All routes are technically open.
+  JWT validation exists but is not enforced at the route level.
+  **This is documented technical debt — do NOT treat frontend auth as
+  guaranteed backend protection.** Any production deployment must address
+  this before exposing the system to untrusted networks.
+  The APP contract (`shared/api/contracts.md`) carries the same warning.
+
+### Other Deferred Items
+
 - **Partial returns**: currently only full-sale returns are supported.
   A `PartialReturnUseCase` would follow the same pattern but select
   specific lines/consumptions.
@@ -371,8 +386,6 @@ behaviour.
   have no HTTP interface yet (they are referenced indirectly via purchases).
 - **User management HTTP endpoints**: `/users` CRUD routes are defined
   in the design but not yet implemented.
-- **RBAC middleware**: role/permission checking exists in the JWT but
-  is not enforced at the route level.
 - **Audit logging**: no explicit audit trail for mutations.
 - **Integration tests with real DB**: defined but skipped without PostgreSQL.
 

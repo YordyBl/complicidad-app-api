@@ -88,7 +88,50 @@ export class ProductTypeOrmRepository
     return entities.map((e) => this.productMapper.toDomain(e));
   }
 
-  // ── ProductListReadRepository method ─────────────────────
+  // ── ProductListReadRepository — getProductById ───────────
+
+  async getProductById(id: string): Promise<ProductListItem | null> {
+    // Step 1: Load product row
+    const prodQuery = `SELECT * FROM products p WHERE p.id = $1`;
+    const prodRows: ProductRow[] = await this.manager.query(prodQuery, [id]);
+
+    if (prodRows.length === 0) return null;
+
+    const p = prodRows[0];
+    if (!p) return null;
+
+    // Step 2: Load variants with stock for this product
+    const varQuery = `
+      SELECT v.*, COALESCE(SUM(il.remaining_quantity), 0) AS stock
+      FROM variants v
+      LEFT JOIN inventory_lots il ON il.variant_id = v.id AND il.remaining_quantity > 0
+      WHERE v.product_id = $1
+      GROUP BY v.id
+    `;
+    const varRows: VariantRow[] = await this.manager.query(varQuery, [id]);
+
+    // Step 3: Assemble ProductListItem
+    return {
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      baseSku: p.base_sku,
+      salePrice: p.sale_price_cents / 100,
+      presalePrice: p.presale_price_cents != null ? p.presale_price_cents / 100 : null,
+      isActive: p.is_active,
+      createdAt: p.created_at.toISOString(),
+      updatedAt: p.updated_at.toISOString(),
+      variants: varRows.map((v) => ({
+        id: v.id,
+        sku: v.sku,
+        attributes: v.attributes,
+        isActive: v.is_active,
+        stock: Number(v.stock),
+      })),
+    };
+  }
+
+  // ── ProductListReadRepository — listProducts ─────────────
 
   /**
    * DB-backed deterministic pagination using count + page-ID approach.
@@ -118,7 +161,10 @@ export class ProductTypeOrmRepository
 
     if (search.length > 0) {
       conditions.push(
-        `(LOWER(p.name) LIKE $${String(pindex)} OR LOWER(p.aliases) LIKE $${String(pindex)})`,
+        `(LOWER(p.name) LIKE $${String(pindex)}` +
+        ` OR LOWER(p.aliases) LIKE $${String(pindex)}` +
+        ` OR LOWER(p.base_sku) LIKE $${String(pindex)}` +
+        ` OR EXISTS (SELECT 1 FROM variants v WHERE v.product_id = p.id AND LOWER(v.sku) LIKE $${String(pindex)}))`,
       );
       params.push(`%${search.toLowerCase()}%`);
       pindex++;
