@@ -275,6 +275,15 @@ All application endpoints are mounted under `/api/v1`.
 |---|---|---|
 | `GET` | `/health` | Health check (unauthenticated) |
 
+### API Documentation (Swagger)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api-docs` | Swagger UI interactive API documentation |
+| `GET` | `/api-docs.json` | OpenAPI 3.0 spec in JSON format |
+
+Access Swagger UI at `http://localhost:3000/api-docs` to explore and test all endpoints.
+
 ## Financial Semantics
 
 The v1 accounting model is **simple cash accounting + FIFO-valued inventory** — not formal double-entry accounting.
