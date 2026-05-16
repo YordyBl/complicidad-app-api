@@ -33,10 +33,15 @@ import type { ProductRepository } from '../../src/modules/inventory/domain/Produ
 import type { InventoryLotRepository } from '../../src/modules/inventory/domain/InventoryLotRepository.js';
 import type { PurchaseRepository } from '../../src/modules/inventory/domain/PurchaseRepository.js';
 import type { CashLedgerRepository } from '../../src/modules/accounting-reports/domain/CashLedgerRepository.js';
+import type { CashBoxRepository } from '../../src/modules/accounting-reports/domain/CashBoxRepository.js';
 import type { SaleRepository } from '../../src/modules/sales-returns/domain/SaleRepository.js';
 import type { Variant } from '../../src/modules/inventory/domain/Variant.js';
 import type { PurchaseLot } from '../../src/modules/inventory/domain/PurchaseLot.js';
 import type { CashLedgerEntry } from '../../src/modules/accounting-reports/domain/CashLedgerEntry.js';
+import type { CashLedgerEntryId } from '../../src/modules/accounting-reports/domain/CashLedgerEntryId.js';
+import { CashBox } from '../../src/modules/accounting-reports/domain/CashBox.js';
+import { CashBoxId } from '../../src/modules/accounting-reports/domain/CashBoxId.js';
+import { toLimaBusinessDate } from '../../src/modules/accounting-reports/domain/LimaBusinessDate.js';
 import type { VariantId } from '../../src/modules/inventory/domain/VariantId.js';
 import type { PurchaseLotId } from '../../src/modules/inventory/domain/PurchaseLotId.js';
 import type { PurchaseId } from '../../src/modules/inventory/domain/PurchaseId.js';
@@ -188,6 +193,13 @@ class FakeCashLedgerRepo implements CashLedgerRepository {
   entries: CashLedgerEntry[] = [];
   async append(entry: CashLedgerEntry): Promise<void> { this.entries.push(entry); }
   async findAllOrdered(): Promise<CashLedgerEntry[]> { return [...this.entries]; }
+  async findById(id: CashLedgerEntryId): Promise<CashLedgerEntry | null> {
+    return this.entries.find((e) => e.id.toString() === id.toString()) ?? null;
+  }
+
+  async findByCashBoxId(cashBoxId: string): Promise<CashLedgerEntry[]> {
+    return this.entries.filter((e) => e.cashBoxId?.toString() === cashBoxId);
+  }
 }
 
 // ── Fake scope for use cases ──────────────────────────────────
@@ -197,6 +209,48 @@ interface FullFlowScope extends UnitOfWorkScope {
   inventoryLots: InventoryLotRepository;
   cashLedger: CashLedgerRepository;
   purchases: PurchaseRepository;
+  cashBoxes: CashBoxRepository;
+}
+
+class FakeCashBoxRepoE2E implements CashBoxRepository {
+  boxes = new Map<string, CashBox>();
+
+  async save(box: CashBox): Promise<void> {
+    this.boxes.set(box.id.toString(), box);
+  }
+
+  async findByBusinessDate(businessDate: string): Promise<CashBox | null> {
+    for (const box of this.boxes.values()) {
+      if (box.businessDate === businessDate) return box;
+    }
+    return null;
+  }
+
+  async findCurrent(): Promise<CashBox | null> {
+    for (const box of this.boxes.values()) {
+      if (box.isOpen()) return box;
+    }
+    return null;
+  }
+
+  async findById(id: CashBoxId): Promise<CashBox | null> {
+    return this.boxes.get(id.toString()) ?? null;
+  }
+
+  async findAllOrdered(): Promise<CashBox[]> {
+    return Array.from(this.boxes.values())
+      .sort((a, b) => b.businessDate.localeCompare(a.businessDate));
+  }
+
+  async findLastClosed(): Promise<CashBox | null> {
+    let last: CashBox | null = null;
+    for (const box of this.boxes.values()) {
+      if (box.isClosed() && (!last || box.businessDate > last.businessDate)) {
+        last = box;
+      }
+    }
+    return last;
+  }
 }
 
 class FakeUoW implements UnitOfWork {
@@ -325,10 +379,28 @@ function createTestApp(): TestInfra {
   const saleRepo = new FakeSaleRepo();
   const cashRepo = new FakeCashLedgerRepo();
   const purchaseRepo = new FakePurchaseRepo();
+  const cashBoxRepo = new FakeCashBoxRepoE2E();
+
+  // Set up an open cash box for today
+  const TODAY_LIMA = toLimaBusinessDate(new Date());
+  void cashBoxRepo.save(
+    new CashBox({
+      id: CashBoxId.generate(),
+      businessDate: TODAY_LIMA,
+      status: 'OPEN',
+      openingBalanceCents: 0,
+      currentBalanceCents: 0,
+      finalBalanceCents: null,
+      closedAt: null,
+      legacy: false,
+      createdAt: new Date(),
+    }),
+  );
 
   const scope: FullFlowScope = {
     sales: saleRepo, inventoryLots: lotRepo,
     cashLedger: cashRepo, purchases: purchaseRepo,
+    cashBoxes: cashBoxRepo,
   };
   const uow = new FakeUoW(scope);
 

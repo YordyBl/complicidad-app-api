@@ -19,6 +19,12 @@ import type { InventoryLotRepository } from '../../../src/modules/inventory/doma
 import type { CashLedgerRepository } from '../../../src/modules/accounting-reports/domain/CashLedgerRepository.js';
 import type { PurchaseLot } from '../../../src/modules/inventory/domain/PurchaseLot.js';
 import type { CashLedgerEntry } from '../../../src/modules/accounting-reports/domain/CashLedgerEntry.js';
+import type { CashLedgerEntryId } from '../../../src/modules/accounting-reports/domain/CashLedgerEntryId.js';
+import type { CashBoxRepository } from '../../../src/modules/accounting-reports/domain/CashBoxRepository.js';
+import { CashBox } from '../../../src/modules/accounting-reports/domain/CashBox.js';
+import { CashBoxId } from '../../../src/modules/accounting-reports/domain/CashBoxId.js';
+import { toLimaBusinessDate } from '../../../src/modules/accounting-reports/domain/LimaBusinessDate.js';
+import { BusinessRuleError } from '../../../src/shared/domain/errors.js';
 import type { VariantId } from '../../../src/modules/inventory/domain/VariantId.js';
 import { PurchaseLot as PurchaseLotEntity } from '../../../src/modules/inventory/domain/PurchaseLot.js';
 import type { PurchaseLotId } from '../../../src/modules/inventory/domain/PurchaseLotId.js';
@@ -40,6 +46,7 @@ interface CancelTestScope extends UnitOfWorkScope {
   sales: SaleRepository;
   inventoryLots: InventoryLotRepository;
   cashLedger: CashLedgerRepository;
+  cashBoxes: CashBoxRepository;
 }
 
 // ── Fakes ────────────────────────────────────────────────────
@@ -111,6 +118,55 @@ class FakeCashLedgerRepository implements CashLedgerRepository {
   async findAllOrdered(): Promise<CashLedgerEntry[]> {
     return [...this.entries];
   }
+
+  async findById(id: CashLedgerEntryId): Promise<CashLedgerEntry | null> {
+    return this.entries.find((e) => e.id.toString() === id.toString()) ?? null;
+  }
+
+  async findByCashBoxId(cashBoxId: string): Promise<CashLedgerEntry[]> {
+    return this.entries.filter((e) => e.cashBoxId?.toString() === cashBoxId);
+  }
+}
+
+class FakeCashBoxRepository implements CashBoxRepository {
+  boxes = new Map<string, CashBox>();
+
+  async save(box: CashBox): Promise<void> {
+    this.boxes.set(box.id.toString(), box);
+  }
+
+  async findByBusinessDate(businessDate: string): Promise<CashBox | null> {
+    for (const box of this.boxes.values()) {
+      if (box.businessDate === businessDate) return box;
+    }
+    return null;
+  }
+
+  async findCurrent(): Promise<CashBox | null> {
+    for (const box of this.boxes.values()) {
+      if (box.isOpen()) return box;
+    }
+    return null;
+  }
+
+  async findById(id: CashBoxId): Promise<CashBox | null> {
+    return this.boxes.get(id.toString()) ?? null;
+  }
+
+  async findAllOrdered(): Promise<CashBox[]> {
+    return Array.from(this.boxes.values())
+      .sort((a, b) => b.businessDate.localeCompare(a.businessDate));
+  }
+
+  async findLastClosed(): Promise<CashBox | null> {
+    let last: CashBox | null = null;
+    for (const box of this.boxes.values()) {
+      if (box.isClosed() && (!last || box.businessDate > last.businessDate)) {
+        last = box;
+      }
+    }
+    return last;
+  }
 }
 
 class FakeUnitOfWork implements UnitOfWork {
@@ -120,8 +176,9 @@ class FakeUnitOfWork implements UnitOfWork {
     sales: SaleRepository,
     inventoryLots: InventoryLotRepository,
     cashLedger: CashLedgerRepository,
+    cashBoxes: CashBoxRepository,
   ) {
-    this.scope = { sales, inventoryLots, cashLedger };
+    this.scope = { sales, inventoryLots, cashLedger, cashBoxes };
   }
 
   async run<T>(fn: (scope: UnitOfWorkScope) => Promise<T>): Promise<T> {
@@ -204,18 +261,58 @@ describe('CancelSaleUseCase', () => {
   let lotRepo: FakeInventoryLotRepository;
   let saleRepo: FakeSaleRepository;
   let cashRepo: FakeCashLedgerRepository;
+  let cashBoxRepo: FakeCashBoxRepository;
   let useCase: CancelSaleUseCase;
+
+  const TODAY_LIMA = toLimaBusinessDate(new Date());
+
+  function ensureOpenCashBox(): void {
+    void cashBoxRepo.save(
+      new CashBox({
+        id: CashBoxId.generate(),
+        businessDate: TODAY_LIMA,
+        status: 'OPEN',
+        openingBalanceCents: 0,
+        currentBalanceCents: 0,
+        finalBalanceCents: null,
+        closedAt: null,
+        legacy: false,
+        createdAt: new Date(),
+      }),
+    );
+  }
 
   beforeEach(() => {
     lotRepo = new FakeInventoryLotRepository();
     saleRepo = new FakeSaleRepository();
     cashRepo = new FakeCashLedgerRepository();
+    cashBoxRepo = new FakeCashBoxRepository();
+    ensureOpenCashBox();
     useCase = new CancelSaleUseCase();
   });
 
   function createUow(): FakeUnitOfWork {
-    return new FakeUnitOfWork(saleRepo, lotRepo, cashRepo);
+    return new FakeUnitOfWork(saleRepo, lotRepo, cashRepo, cashBoxRepo);
   }
+
+  describe('open caja enforcement', () => {
+    it('rejects cancellation when no cash box is open for today', async () => {
+      const emptyBoxRepo = new FakeCashBoxRepository();
+      const uow = new FakeUnitOfWork(saleRepo, lotRepo, cashRepo, emptyBoxRepo);
+
+      const { sale, lotA, lotB } = createPopulatedSale('sale-caja-1');
+      saleRepo.sales.set('sale-caja-1', sale);
+      lotRepo.lots.set('lot-a', lotA);
+      lotRepo.lots.set('lot-b', lotB);
+
+      const result = await useCase.execute({ saleId: 'sale-caja-1' }, uow);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBeInstanceOf(BusinessRuleError);
+      expect(result.error.message).toContain('caja abierta');
+    });
+  });
 
   describe('exact lot restoration', () => {
     it('cancels a sale and restores exact consumption quantities to their lots', async () => {
@@ -348,18 +445,58 @@ describe('ReturnFullSaleUseCase', () => {
   let lotRepo: FakeInventoryLotRepository;
   let saleRepo: FakeSaleRepository;
   let cashRepo: FakeCashLedgerRepository;
+  let cashBoxRepo: FakeCashBoxRepository;
   let useCase: ReturnFullSaleUseCase;
+
+  const TODAY_LIMA = toLimaBusinessDate(new Date());
+
+  function ensureOpenCashBox(): void {
+    void cashBoxRepo.save(
+      new CashBox({
+        id: CashBoxId.generate(),
+        businessDate: TODAY_LIMA,
+        status: 'OPEN',
+        openingBalanceCents: 0,
+        currentBalanceCents: 0,
+        finalBalanceCents: null,
+        closedAt: null,
+        legacy: false,
+        createdAt: new Date(),
+      }),
+    );
+  }
 
   beforeEach(() => {
     lotRepo = new FakeInventoryLotRepository();
     saleRepo = new FakeSaleRepository();
     cashRepo = new FakeCashLedgerRepository();
+    cashBoxRepo = new FakeCashBoxRepository();
+    ensureOpenCashBox();
     useCase = new ReturnFullSaleUseCase();
   });
 
   function createUow(): FakeUnitOfWork {
-    return new FakeUnitOfWork(saleRepo, lotRepo, cashRepo);
+    return new FakeUnitOfWork(saleRepo, lotRepo, cashRepo, cashBoxRepo);
   }
+
+  describe('open caja enforcement', () => {
+    it('rejects return when no cash box is open for today', async () => {
+      const emptyBoxRepo = new FakeCashBoxRepository();
+      const uow = new FakeUnitOfWork(saleRepo, lotRepo, cashRepo, emptyBoxRepo);
+
+      const { sale, lotA, lotB } = createPopulatedSale('return-caja-1');
+      saleRepo.sales.set('return-caja-1', sale);
+      lotRepo.lots.set('lot-a', lotA);
+      lotRepo.lots.set('lot-b', lotB);
+
+      const result = await useCase.execute({ saleId: 'return-caja-1' }, uow);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBeInstanceOf(BusinessRuleError);
+      expect(result.error.message).toContain('caja abierta');
+    });
+  });
 
   describe('exact lot restoration', () => {
     it('returns a sale and restores exact consumed quantities to their lots', async () => {

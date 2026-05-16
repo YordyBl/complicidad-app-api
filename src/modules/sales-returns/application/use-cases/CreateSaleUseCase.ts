@@ -29,6 +29,8 @@ import type { UnitOfWorkScope } from '../../../../shared/application/UnitOfWork.
 import type { SaleRepository } from '../../domain/SaleRepository.js';
 import type { InventoryLotRepository } from '../../../inventory/domain/InventoryLotRepository.js';
 import type { CashLedgerRepository } from '../../../accounting-reports/domain/CashLedgerRepository.js';
+import type { CashBoxRepository } from '../../../accounting-reports/domain/CashBoxRepository.js';
+import { toLimaBusinessDate } from '../../../accounting-reports/domain/LimaBusinessDate.js';
 import type { CustomerRepository } from '../../../customers/domain/CustomerRepository.js';
 import type { VariantRepository } from '../../../inventory/domain/VariantRepository.js';
 import type { ProductRepository } from '../../../inventory/domain/ProductRepository.js';
@@ -55,6 +57,7 @@ export interface SaleScope extends UnitOfWorkScope {
   sales: SaleRepository;
   inventoryLots: InventoryLotRepository;
   cashLedger: CashLedgerRepository;
+  cashBoxes: CashBoxRepository;
 }
 
 // ── DTOs ─────────────────────────────────────────────────────
@@ -176,6 +179,13 @@ export class CreateSaleUseCase {
     return uow.run(async (baseScope) => {
       const scope = baseScope as SaleScope;
 
+      // 0. Enforce open caja for today
+      const today = toLimaBusinessDate(new Date());
+      const todayBox = await scope.cashBoxes.findByBusinessDate(today);
+      if (!todayBox?.isOpen()) {
+        return err(new BusinessRuleError('No hay una caja abierta para hoy'));
+      }
+
       // 1. Validate customer exists
       const customer = await this.customerRepository.findById(CustomerId.from(command.customerId));
       if (!customer) {
@@ -292,7 +302,7 @@ export class CreateSaleUseCase {
         await scope.inventoryLots.saveMany(modifiedLots);
       }
 
-      // 6. Create cash ledger entry (positive income)
+      // 6. Create cash ledger entry (positive income, scoped to today's caja)
       const cashEntry = new CashLedgerEntry(
         CashLedgerEntryId.generate(),
         'SALE_INCOME',
@@ -300,6 +310,8 @@ export class CreateSaleUseCase {
         sale.id.toString(),
         null,
         now,
+        todayBox.id,
+        null,
       );
       await scope.cashLedger.append(cashEntry);
 

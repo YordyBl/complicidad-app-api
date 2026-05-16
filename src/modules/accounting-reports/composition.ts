@@ -3,11 +3,16 @@
  *
  * Wires the domain, application, infrastructure, and HTTP layers together.
  * Called from the server bootstrap once the DataSource is available.
+ *
+ * Returns an Express Router that includes both legacy report endpoints
+ * and the new cash-box endpoints.
  */
 import { Router } from 'express';
 import type { EntityManager } from 'typeorm';
 import { CashClosingTypeOrmRepository } from './infrastructure/typeorm/CashClosingTypeOrmRepository.js';
 import { ReportQueryAdapter } from './infrastructure/typeorm/ReportQueryAdapter.js';
+import { CashBoxTypeOrmRepository } from './infrastructure/typeorm/CashBoxTypeOrmRepository.js';
+import { CashLedgerTypeOrmRepository } from './infrastructure/typeorm/CashLedgerTypeOrmRepository.js';
 import { ManualCashCloseUseCase } from './application/use-cases/ManualCashCloseUseCase.js';
 import { GetLiquidityUseCase } from './application/use-cases/GetLiquidityUseCase.js';
 import { GetStockInvestmentUseCase } from './application/use-cases/GetStockInvestmentUseCase.js';
@@ -18,8 +23,17 @@ import { GetReinvestmentUseCase } from './application/use-cases/GetReinvestmentU
 import { GetOperatingCapitalUseCase } from './application/use-cases/GetOperatingCapitalUseCase.js';
 import { GetStockByProductUseCase } from './application/use-cases/GetStockByProductUseCase.js';
 import { GetLotsUseCase } from './application/use-cases/GetLotsUseCase.js';
+import { OpenCashBoxUseCase } from './application/use-cases/OpenCashBoxUseCase.js';
+import { CloseCashBoxUseCase } from './application/use-cases/CloseCashBoxUseCase.js';
+import { GetCurrentCashBoxUseCase } from './application/use-cases/GetCurrentCashBoxUseCase.js';
+import { GetCashBoxSummaryUseCase } from './application/use-cases/GetCashBoxSummaryUseCase.js';
+import { AddManualMovementUseCase } from './application/use-cases/AddManualMovementUseCase.js';
+import { ReverseMovementUseCase } from './application/use-cases/ReverseMovementUseCase.js';
+import { GetCashBoxMovementsUseCase } from './application/use-cases/GetCashBoxMovementsUseCase.js';
 import { ReportController } from './interfaces/http/ReportController.js';
 import { createReportRouter } from './interfaces/http/report-routes.js';
+import { CashBoxController } from './interfaces/http/CashBoxController.js';
+import { createCashBoxRouter } from './interfaces/http/cash-box-routes.js';
 
 /**
  * Create and wire the accounting/reports module, returning an Express Router.
@@ -38,11 +52,15 @@ export function createAccountingModule(manager?: EntityManager): Router {
     return router;
   }
 
-  // Infrastructure
+  // Infrastructure — reports
   const reportRepo = new ReportQueryAdapter(manager);
   const cashClosingRepo = new CashClosingTypeOrmRepository(manager);
 
-  // Application use cases
+  // Infrastructure — cash boxes
+  const cashBoxRepo = new CashBoxTypeOrmRepository(manager);
+  const cashLedgerRepo = new CashLedgerTypeOrmRepository(manager);
+
+  // ── Report use cases ──────────────────────────────────────
   const getLiquidityUseCase = new GetLiquidityUseCase(reportRepo);
   const getStockInvestmentUseCase = new GetStockInvestmentUseCase(reportRepo);
   const getSalesTotalUseCase = new GetSalesTotalUseCase(reportRepo);
@@ -54,8 +72,17 @@ export function createAccountingModule(manager?: EntityManager): Router {
   const getLotsUseCase = new GetLotsUseCase(reportRepo);
   const manualCashCloseUseCase = new ManualCashCloseUseCase(reportRepo, cashClosingRepo);
 
-  // HTTP controller
-  const controller = new ReportController(
+  // ── Cash box use cases ────────────────────────────────────
+  const openCashBoxUseCase = new OpenCashBoxUseCase(cashBoxRepo);
+  const closeCashBoxUseCase = new CloseCashBoxUseCase(cashBoxRepo);
+  const getCurrentCashBoxUseCase = new GetCurrentCashBoxUseCase(cashBoxRepo);
+  const getCashBoxSummaryUseCase = new GetCashBoxSummaryUseCase(cashBoxRepo, cashLedgerRepo);
+  const addManualMovementUseCase = new AddManualMovementUseCase(cashBoxRepo, cashLedgerRepo);
+  const reverseMovementUseCase = new ReverseMovementUseCase(cashBoxRepo, cashLedgerRepo);
+  const getCashBoxMovementsUseCase = new GetCashBoxMovementsUseCase(cashBoxRepo, cashLedgerRepo);
+
+  // HTTP controllers
+  const reportController = new ReportController(
     getLiquidityUseCase,
     getStockInvestmentUseCase,
     getSalesTotalUseCase,
@@ -68,5 +95,20 @@ export function createAccountingModule(manager?: EntityManager): Router {
     manualCashCloseUseCase,
   );
 
-  return createReportRouter(controller);
+  const cashBoxController = new CashBoxController(
+    openCashBoxUseCase,
+    closeCashBoxUseCase,
+    getCurrentCashBoxUseCase,
+    getCashBoxSummaryUseCase,
+    addManualMovementUseCase,
+    getCashBoxMovementsUseCase,
+    reverseMovementUseCase,
+    cashBoxRepo,
+  );
+
+  // Mount both routers
+  const router = Router({ mergeParams: true });
+  router.use(createReportRouter(reportController));
+  router.use(createCashBoxRouter(cashBoxController));
+  return router;
 }

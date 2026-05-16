@@ -20,12 +20,14 @@
  */
 import { err, ok } from '../../../../shared/domain/Result.js';
 import type { Result } from '../../../../shared/domain/Result.js';
-import { NotFoundError } from '../../../../shared/domain/errors.js';
+import { NotFoundError, BusinessRuleError } from '../../../../shared/domain/errors.js';
 import type { UnitOfWork } from '../../../../shared/application/UnitOfWork.js';
 import type { UnitOfWorkScope } from '../../../../shared/application/UnitOfWork.js';
 import type { SaleRepository } from '../../domain/SaleRepository.js';
 import type { InventoryLotRepository } from '../../../inventory/domain/InventoryLotRepository.js';
 import type { CashLedgerRepository } from '../../../accounting-reports/domain/CashLedgerRepository.js';
+import type { CashBoxRepository } from '../../../accounting-reports/domain/CashBoxRepository.js';
+import { toLimaBusinessDate } from '../../../accounting-reports/domain/LimaBusinessDate.js';
 import { SaleStatusError } from '../../domain/Sale.js';
 import { SaleId } from '../../domain/SaleId.js';
 import { PurchaseLotId } from '../../../inventory/domain/PurchaseLotId.js';
@@ -38,6 +40,7 @@ export interface CancelScope extends UnitOfWorkScope {
   sales: SaleRepository;
   inventoryLots: InventoryLotRepository;
   cashLedger: CashLedgerRepository;
+  cashBoxes: CashBoxRepository;
 }
 
 // ── DTOs ─────────────────────────────────────────────────────
@@ -67,6 +70,13 @@ export class CancelSaleUseCase {
   ): Promise<Result<CancelSaleResponse>> {
     return uow.run(async (baseScope) => {
       const scope = baseScope as CancelScope;
+
+      // 0. Enforce open caja for today
+      const today = toLimaBusinessDate(new Date());
+      const todayBox = await scope.cashBoxes.findByBusinessDate(today);
+      if (!todayBox?.isOpen()) {
+        return err(new BusinessRuleError('No hay una caja abierta para hoy'));
+      }
 
       // ── PHASE A: Validate all conditions (NO mutations) ──────────
 
@@ -134,7 +144,7 @@ export class CancelSaleUseCase {
         await scope.inventoryLots.saveMany(lots);
       }
 
-      // 9. Create reversal cash entry (negative SALE_INCOME)
+      // 9. Create reversal cash entry (negative SALE_INCOME, scoped to today's caja)
       const cashEntry = new CashLedgerEntry(
         CashLedgerEntryId.generate(),
         'SALE_INCOME',
@@ -142,6 +152,8 @@ export class CancelSaleUseCase {
         sale.id.toString(),
         null,
         now,
+        todayBox.id,
+        null,
       );
       await scope.cashLedger.append(cashEntry);
 

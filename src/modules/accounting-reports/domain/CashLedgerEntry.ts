@@ -11,9 +11,15 @@
  * - RETURN_OUTFLOW: Cash refunded for a return (negative)
  * - MANUAL_ADJUSTMENT: Manual cash adjustment (positive or negative)
  * - WITHDRAWAL: Cash withdrawn from the business (negative)
+ *
+ * Each entry can be scoped to a CashBox via cashBoxId. Legacy entries
+ * created before cash-box scoping have cashBoxId = null.
+ * The concept field provides a human-readable description (e.g. for
+ * manual movements).
  */
 import type { Money } from '../../../shared/domain/Money.js';
 import type { CashLedgerEntryId } from './CashLedgerEntryId.js';
+import type { CashBoxId } from './CashBoxId.js';
 
 export const CASH_ENTRY_TYPES = [
   'SALE_INCOME',
@@ -39,6 +45,10 @@ export class CashLedgerEntry {
     private readonly _sourceId: string,
     private readonly _tag: string | null,
     private readonly _createdAt: Date,
+    /** CashBox this entry belongs to (null for legacy pre-scoping entries). */
+    private readonly _cashBoxId: CashBoxId | null = null,
+    /** Human-readable concept/description (e.g. for manual movements). */
+    private readonly _concept: string | null = null,
   ) {
     Object.freeze(this);
   }
@@ -65,6 +75,16 @@ export class CashLedgerEntry {
 
   get createdAt(): Date {
     return this._createdAt;
+  }
+
+  /** The CashBox this entry belongs to, or null for legacy entries. */
+  get cashBoxId(): CashBoxId | null {
+    return this._cashBoxId;
+  }
+
+  /** Human-readable concept/description, or null if not set. */
+  get concept(): string | null {
+    return this._concept;
   }
 
   toString(): string {

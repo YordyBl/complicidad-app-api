@@ -11,6 +11,7 @@ import { DataSource, EntityManager } from 'typeorm';
 import type { UnitOfWork, UnitOfWorkScope } from '../../shared/application/UnitOfWork.js';
 import { SaleTypeOrmRepository } from '../../modules/sales-returns/infrastructure/typeorm/SaleTypeOrmRepository.js';
 import { InventoryLotTypeOrmRepository } from '../../modules/inventory/infrastructure/typeorm/InventoryLotTypeOrmRepository.js';
+import { CashBoxTypeOrmRepository } from '../../modules/accounting-reports/infrastructure/typeorm/CashBoxTypeOrmRepository.js';
 import { CashLedgerTypeOrmRepository } from '../../modules/accounting-reports/infrastructure/typeorm/CashLedgerTypeOrmRepository.js';
 import { PurchaseTypeOrmRepository } from '../../modules/inventory/infrastructure/typeorm/PurchaseTypeOrmRepository.js';
 
@@ -30,12 +31,14 @@ export class TypeOrmUnitOfWorkScope implements UnitOfWorkScope {
   readonly inventoryLots: InventoryLotTypeOrmRepository;
   readonly cashLedger: CashLedgerTypeOrmRepository;
   readonly purchases: PurchaseTypeOrmRepository;
+  readonly cashBoxes: CashBoxTypeOrmRepository;
 
   constructor(protected readonly manager: EntityManager) {
     this.sales = new SaleTypeOrmRepository(manager);
     this.inventoryLots = new InventoryLotTypeOrmRepository(manager);
     this.cashLedger = new CashLedgerTypeOrmRepository(manager);
     this.purchases = new PurchaseTypeOrmRepository(manager);
+    this.cashBoxes = new CashBoxTypeOrmRepository(manager);
   }
 }
 

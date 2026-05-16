@@ -24,6 +24,7 @@ import { CustomerEntity } from '../../modules/customers/infrastructure/typeorm/C
 import { SaleEntity } from '../../modules/sales-returns/infrastructure/typeorm/SaleEntity.js';
 import { SaleLineEntity } from '../../modules/sales-returns/infrastructure/typeorm/SaleLineEntity.js';
 import { LotConsumptionRecordEntity } from '../../modules/sales-returns/infrastructure/typeorm/LotConsumptionRecordEntity.js';
+import { CashBoxEntity } from '../../modules/accounting-reports/infrastructure/typeorm/CashBoxEntity.js';
 import { CashClosingEntity } from '../../modules/accounting-reports/infrastructure/typeorm/CashClosingEntity.js';
 import { CashLedgerEntryEntity } from '../../modules/accounting-reports/infrastructure/typeorm/CashLedgerEntryEntity.js';
 import { UserEntity } from '../../modules/auth-users/infrastructure/typeorm/UserEntity.js';
@@ -42,6 +43,7 @@ const dataSourceOptions: DataSourceOptions = {
     SaleEntity,
     SaleLineEntity,
     LotConsumptionRecordEntity,
+    CashBoxEntity,
     CashClosingEntity,
     CashLedgerEntryEntity,
     UserEntity,

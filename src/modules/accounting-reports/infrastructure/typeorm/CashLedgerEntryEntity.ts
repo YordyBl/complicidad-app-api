@@ -3,6 +3,9 @@
  *
  * Each row represents an immutable entry in the cash ledger.
  * The balance at any point is the sum of all entry amounts.
+ *
+ * Entries can be scoped to a CashBox via cashBoxId. Legacy entries
+ * created before daily-cash-box scoping have cashBoxId = null.
  */
 import { Entity, Column } from 'typeorm';
 import { BaseEntity } from '../../../../infrastructure/typeorm/BaseEntity.js';
@@ -23,4 +26,12 @@ export class CashLedgerEntryEntity extends BaseEntity {
   /** Optional tag for categorising entries (e.g. REINVESTMENT, RESTOCK). */
   @Column({ type: 'varchar', length: 50, nullable: true })
   tag!: string | null;
+
+  /** CashBox this entry belongs to (null for legacy pre-scoping entries). */
+  @Column({ name: 'cash_box_id', type: 'varchar', length: 255, nullable: true })
+  cashBoxId!: string | null;
+
+  /** Human-readable concept/description (e.g. for manual movements). */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  concept!: string | null;
 }

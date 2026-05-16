@@ -18,6 +18,7 @@ import type { CashLedgerRepository } from '../../../src/modules/accounting-repor
 import type { PurchaseLot } from '../../../src/modules/inventory/domain/PurchaseLot.js';
 import type { Purchase } from '../../../src/modules/inventory/domain/Purchase.js';
 import type { CashLedgerEntry } from '../../../src/modules/accounting-reports/domain/CashLedgerEntry.js';
+import type { CashLedgerEntryId } from '../../../src/modules/accounting-reports/domain/CashLedgerEntryId.js';
 import type { Variant } from '../../../src/modules/inventory/domain/Variant.js';
 import type { VariantId } from '../../../src/modules/inventory/domain/VariantId.js';
 import type { PurchaseLotId } from '../../../src/modules/inventory/domain/PurchaseLotId.js';
@@ -28,7 +29,11 @@ import { Variant as VariantEntity } from '../../../src/modules/inventory/domain/
 import { VariantId as VariantIdEntity } from '../../../src/modules/inventory/domain/VariantId.js';
 import { ProductId as ProductIdEntity } from '../../../src/modules/inventory/domain/ProductId.js';
 import { Sku as SkuEntity } from '../../../src/modules/inventory/domain/Sku.js';
-import { NotFoundError } from '../../../src/shared/domain/errors.js';
+import { NotFoundError, BusinessRuleError } from '../../../src/shared/domain/errors.js';
+import { CashBox } from '../../../src/modules/accounting-reports/domain/CashBox.js';
+import { CashBoxId } from '../../../src/modules/accounting-reports/domain/CashBoxId.js';
+import type { CashBoxRepository } from '../../../src/modules/accounting-reports/domain/CashBoxRepository.js';
+import { toLimaBusinessDate } from '../../../src/modules/accounting-reports/domain/LimaBusinessDate.js';
 
 // ── Scope type ───────────────────────────────────────────────
 
@@ -36,6 +41,66 @@ interface TestScope extends UnitOfWorkScope {
   inventoryLots: InventoryLotRepository;
   purchases: PurchaseRepository;
   cashLedger: CashLedgerRepository;
+  cashBoxes: CashBoxRepository;
+}
+
+// ── Fake CashBoxRepository ───────────────────────────────────
+
+class FakeCashBoxRepository implements CashBoxRepository {
+  boxes = new Map<string, CashBox>();
+
+  async save(box: CashBox): Promise<void> {
+    this.boxes.set(box.id.toString(), box);
+  }
+
+  async findByBusinessDate(businessDate: string): Promise<CashBox | null> {
+    for (const box of this.boxes.values()) {
+      if (box.businessDate === businessDate) return box;
+    }
+    return null;
+  }
+
+  async findCurrent(): Promise<CashBox | null> {
+    for (const box of this.boxes.values()) {
+      if (box.isOpen()) return box;
+    }
+    return null;
+  }
+
+  async findById(id: CashBoxId): Promise<CashBox | null> {
+    return this.boxes.get(id.toString()) ?? null;
+  }
+
+  async findAllOrdered(): Promise<CashBox[]> {
+    return Array.from(this.boxes.values())
+      .sort((a, b) => b.businessDate.localeCompare(a.businessDate));
+  }
+
+  async findLastClosed(): Promise<CashBox | null> {
+    let last: CashBox | null = null;
+    for (const box of this.boxes.values()) {
+      if (box.isClosed() && (!last || box.businessDate > last.businessDate)) {
+        last = box;
+      }
+    }
+    return last;
+  }
+}
+
+// ── Helper to create an OPEN cash box for today ──────────────
+
+function createOpenCashBox(): CashBox {
+  return new CashBox({
+    id: CashBoxId.generate(),
+    businessDate: toLimaBusinessDate(new Date()),
+    status: 'OPEN',
+    openingBalanceCents: 0,
+    currentBalanceCents: 0,
+    finalBalanceCents: null,
+    closedAt: null,
+    legacy: false,
+    createdAt: new Date(),
+  });
 }
 
 // ── Fakes ────────────────────────────────────────────────────
@@ -133,17 +198,21 @@ class FakeCashLedgerRepository implements CashLedgerRepository {
   async findAllOrdered(): Promise<CashLedgerEntry[]> {
     return [...this.entries];
   }
+
+  async findById(id: CashLedgerEntryId): Promise<CashLedgerEntry | null> {
+    return this.entries.find((e) => e.id.toString() === id.toString()) ?? null;
+  }
+
+  async findByCashBoxId(cashBoxId: string): Promise<CashLedgerEntry[]> {
+    return this.entries.filter((e) => e.cashBoxId?.toString() === cashBoxId);
+  }
 }
 
 class FakeUnitOfWork implements UnitOfWork {
   scope: TestScope;
 
-  constructor(
-    inventoryLots: InventoryLotRepository,
-    purchases: PurchaseRepository,
-    cashLedger: CashLedgerRepository,
-  ) {
-    this.scope = { inventoryLots, purchases, cashLedger };
+  constructor(scope: TestScope) {
+    this.scope = scope;
   }
 
   async run<T>(fn: (scope: UnitOfWorkScope) => Promise<T>): Promise<T> {
@@ -174,6 +243,7 @@ describe('RegisterPurchaseUseCase', () => {
   let lotRepo: FakeInventoryLotRepository;
   let purchaseRepo: FakePurchaseRepository;
   let cashRepo: FakeCashLedgerRepository;
+  let cashBoxRepo: FakeCashBoxRepository;
   let useCase: RegisterPurchaseUseCase;
   let variantA: VariantEntity;
   let variantB: VariantEntity;
@@ -188,12 +258,20 @@ describe('RegisterPurchaseUseCase', () => {
     lotRepo = new FakeInventoryLotRepository();
     purchaseRepo = new FakePurchaseRepository();
     cashRepo = new FakeCashLedgerRepository();
+    cashBoxRepo = new FakeCashBoxRepository();
+    // Create an OPEN cash box for today so existing tests pass
+    void cashBoxRepo.save(createOpenCashBox());
 
     useCase = new RegisterPurchaseUseCase(variantRepo);
   });
 
   function createUow(): FakeUnitOfWork {
-    return new FakeUnitOfWork(lotRepo, purchaseRepo, cashRepo);
+    return new FakeUnitOfWork({
+      inventoryLots: lotRepo,
+      purchases: purchaseRepo,
+      cashLedger: cashRepo,
+      cashBoxes: cashBoxRepo,
+    });
   }
 
   describe('batch purchase with items[]', () => {
@@ -456,6 +534,79 @@ describe('RegisterPurchaseUseCase', () => {
       expect(lotRepo.lots.size).toBe(0);
       expect(purchaseRepo.purchases.size).toBe(0);
       expect(cashRepo.entries).toHaveLength(0);
+    });
+  });
+
+  describe('open caja enforcement', () => {
+    it('rejects purchase when no cash box is open for today', async () => {
+      // Clear the default open cash box set up in beforeEach
+      cashBoxRepo.boxes.clear();
+
+      const command: RegisterPurchaseCommand = {
+        items: [
+          { variantId: variantA.id.toString(), quantity: 10, unitCost: 5.00 },
+        ],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBeInstanceOf(BusinessRuleError);
+      expect(result.error.message).toContain('caja');
+    });
+
+    it('rejects purchase when today\'s cash box is closed', async () => {
+      // Replace open box with a closed one for today
+      cashBoxRepo.boxes.clear();
+      const today = toLimaBusinessDate(new Date());
+      const closedBox = new CashBox({
+        id: CashBoxId.generate(),
+        businessDate: today,
+        status: 'CLOSED',
+        openingBalanceCents: 0,
+        currentBalanceCents: 0,
+        finalBalanceCents: 0,
+        closedAt: new Date(),
+        legacy: false,
+        createdAt: new Date(),
+      });
+      void cashBoxRepo.save(closedBox);
+
+      const command: RegisterPurchaseCommand = {
+        items: [
+          { variantId: variantA.id.toString(), quantity: 10, unitCost: 5.00 },
+        ],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBeInstanceOf(BusinessRuleError);
+      expect(result.error.message).toContain('caja');
+    });
+
+    it('creates cash ledger entry scoped to the open cash box id', async () => {
+      const command: RegisterPurchaseCommand = {
+        items: [
+          { variantId: variantA.id.toString(), quantity: 10, unitCost: 5.00 },
+        ],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // The cash ledger entry should have the cashBoxId from today's open box
+      const todayBox = await cashBoxRepo.findCurrent();
+      expect(todayBox).not.toBeNull();
+
+      expect(cashRepo.entries).toHaveLength(1);
+      expect(cashRepo.entries[0]!.cashBoxId?.toString()).toBe(todayBox!.id.toString());
+      expect(cashRepo.entries[0]!.type).toBe('PURCHASE_OUTFLOW');
+      expect(cashRepo.entries[0]!.amount.cents).toBe(-5000);
     });
   });
 });

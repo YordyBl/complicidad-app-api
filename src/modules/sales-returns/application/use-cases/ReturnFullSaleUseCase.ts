@@ -23,12 +23,14 @@
  */
 import { err, ok } from '../../../../shared/domain/Result.js';
 import type { Result } from '../../../../shared/domain/Result.js';
-import { NotFoundError } from '../../../../shared/domain/errors.js';
+import { NotFoundError, BusinessRuleError } from '../../../../shared/domain/errors.js';
 import type { UnitOfWork } from '../../../../shared/application/UnitOfWork.js';
 import type { UnitOfWorkScope } from '../../../../shared/application/UnitOfWork.js';
 import type { SaleRepository } from '../../domain/SaleRepository.js';
 import type { InventoryLotRepository } from '../../../inventory/domain/InventoryLotRepository.js';
 import type { CashLedgerRepository } from '../../../accounting-reports/domain/CashLedgerRepository.js';
+import type { CashBoxRepository } from '../../../accounting-reports/domain/CashBoxRepository.js';
+import { toLimaBusinessDate } from '../../../accounting-reports/domain/LimaBusinessDate.js';
 import { SaleStatusError } from '../../domain/Sale.js';
 import { SaleId } from '../../domain/SaleId.js';
 import { PurchaseLotId } from '../../../inventory/domain/PurchaseLotId.js';
@@ -41,6 +43,7 @@ export interface ReturnScope extends UnitOfWorkScope {
   sales: SaleRepository;
   inventoryLots: InventoryLotRepository;
   cashLedger: CashLedgerRepository;
+  cashBoxes: CashBoxRepository;
 }
 
 // ── DTOs ─────────────────────────────────────────────────────
@@ -70,6 +73,13 @@ export class ReturnFullSaleUseCase {
   ): Promise<Result<ReturnFullSaleResponse>> {
     return uow.run(async (baseScope) => {
       const scope = baseScope as ReturnScope;
+
+      // 0. Enforce open caja for today
+      const today = toLimaBusinessDate(new Date());
+      const todayBox = await scope.cashBoxes.findByBusinessDate(today);
+      if (!todayBox?.isOpen()) {
+        return err(new BusinessRuleError('No hay una caja abierta para hoy'));
+      }
 
       // ── PHASE A: Validate all conditions (NO mutations) ──────────
 
@@ -137,7 +147,7 @@ export class ReturnFullSaleUseCase {
         await scope.inventoryLots.saveMany(lots);
       }
 
-      // 9. Create RETURN_OUTFLOW cash entry (negative — cash leaving the business)
+      // 9. Create RETURN_OUTFLOW cash entry (negative — cash leaving the business, scoped to today's caja)
       const cashEntry = new CashLedgerEntry(
         CashLedgerEntryId.generate(),
         'RETURN_OUTFLOW',
@@ -145,6 +155,8 @@ export class ReturnFullSaleUseCase {
         sale.id.toString(),
         null,
         now,
+        todayBox.id,
+        null,
       );
       await scope.cashLedger.append(cashEntry);
 

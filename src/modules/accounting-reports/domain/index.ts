@@ -5,3 +5,8 @@ export type { CashLedgerRepository } from './CashLedgerRepository.js';
 export { CashClosing } from './CashClosing.js';
 export type { CashClosingRepository } from './CashClosingRepository.js';
 export type { ReportReadRepository, StockByProductItem, LotReportItem } from './ReportReadRepository.js';
+export { CashBoxId } from './CashBoxId.js';
+export { CashBox, CASH_BOX_STATUSES } from './CashBox.js';
+export type { CashBoxStatus, CashBoxProps } from './CashBox.js';
+export type { CashBoxRepository } from './CashBoxRepository.js';
+export { toLimaBusinessDate } from './LimaBusinessDate.js';

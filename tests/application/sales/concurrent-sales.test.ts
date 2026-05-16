@@ -29,6 +29,11 @@ import type { CashLedgerRepository } from '../../../src/modules/accounting-repor
 import type { PurchaseLot } from '../../../src/modules/inventory/domain/PurchaseLot.js';
 import type { Variant } from '../../../src/modules/inventory/domain/Variant.js';
 import type { CashLedgerEntry } from '../../../src/modules/accounting-reports/domain/CashLedgerEntry.js';
+import type { CashLedgerEntryId } from '../../../src/modules/accounting-reports/domain/CashLedgerEntryId.js';
+import type { CashBoxRepository } from '../../../src/modules/accounting-reports/domain/CashBoxRepository.js';
+import { CashBox } from '../../../src/modules/accounting-reports/domain/CashBox.js';
+import { CashBoxId } from '../../../src/modules/accounting-reports/domain/CashBoxId.js';
+import { toLimaBusinessDate } from '../../../src/modules/accounting-reports/domain/LimaBusinessDate.js';
 import type { VariantId } from '../../../src/modules/inventory/domain/VariantId.js';
 import type { ProductId } from '../../../src/modules/inventory/domain/ProductId.js';
 import type { Sku } from '../../../src/modules/inventory/domain/Sku.js';
@@ -52,6 +57,7 @@ interface ConcurrencyScope extends UnitOfWorkScope {
   sales: SaleRepository;
   inventoryLots: InventoryLotRepository;
   cashLedger: CashLedgerRepository;
+  cashBoxes: CashBoxRepository;
 }
 
 // ── Fakes (same pattern as create-sale.test.ts) ───────────────
@@ -126,6 +132,13 @@ class FakeCashLedgerRepository implements CashLedgerRepository {
   entries: CashLedgerEntry[] = [];
   async append(entry: CashLedgerEntry): Promise<void> { this.entries.push(entry); }
   async findAllOrdered(): Promise<CashLedgerEntry[]> { return [...this.entries]; }
+  async findById(id: CashLedgerEntryId): Promise<CashLedgerEntry | null> {
+    return this.entries.find((e) => e.id.toString() === id.toString()) ?? null;
+  }
+
+  async findByCashBoxId(cashBoxId: string): Promise<CashLedgerEntry[]> {
+    return this.entries.filter((e) => e.cashBoxId?.toString() === cashBoxId);
+  }
 }
 
 /**
@@ -140,6 +153,47 @@ class FakeCashLedgerRepository implements CashLedgerRepository {
  * either writes), a PostgreSQL integration test with `FOR UPDATE` row
  * locks is required (see docblock at top of file).
  */
+class FakeCashBoxRepositoryConcurrent implements CashBoxRepository {
+  boxes = new Map<string, CashBox>();
+
+  async save(box: CashBox): Promise<void> {
+    this.boxes.set(box.id.toString(), box);
+  }
+
+  async findByBusinessDate(businessDate: string): Promise<CashBox | null> {
+    for (const box of this.boxes.values()) {
+      if (box.businessDate === businessDate) return box;
+    }
+    return null;
+  }
+
+  async findCurrent(): Promise<CashBox | null> {
+    for (const box of this.boxes.values()) {
+      if (box.isOpen()) return box;
+    }
+    return null;
+  }
+
+  async findById(id: CashBoxId): Promise<CashBox | null> {
+    return this.boxes.get(id.toString()) ?? null;
+  }
+
+  async findAllOrdered(): Promise<CashBox[]> {
+    return Array.from(this.boxes.values())
+      .sort((a, b) => b.businessDate.localeCompare(a.businessDate));
+  }
+
+  async findLastClosed(): Promise<CashBox | null> {
+    let last: CashBox | null = null;
+    for (const box of this.boxes.values()) {
+      if (box.isClosed() && (!last || box.businessDate > last.businessDate)) {
+        last = box;
+      }
+    }
+    return last;
+  }
+}
+
 class SequentialFakeUnitOfWork implements UnitOfWork {
   constructor(public scope: ConcurrencyScope) {}
 
@@ -196,10 +250,29 @@ describe('Concurrent final-unit sales', () => {
   let lotRepo: FakeInventoryLotRepository;
   let saleRepo: FakeSaleRepository;
   let cashRepo: FakeCashLedgerRepository;
+  let cashBoxRepo: FakeCashBoxRepositoryConcurrent;
   let useCase: CreateSaleUseCase;
   let customer: Customer;
   let variant: VariantEntity;
   let productId: ProductIdEntity;
+
+  const TODAY_LIMA = toLimaBusinessDate(new Date());
+
+  function ensureOpenCashBox(): void {
+    void cashBoxRepo.save(
+      new CashBox({
+        id: CashBoxId.generate(),
+        businessDate: TODAY_LIMA,
+        status: 'OPEN',
+        openingBalanceCents: 0,
+        currentBalanceCents: 0,
+        finalBalanceCents: null,
+        closedAt: null,
+        legacy: false,
+        createdAt: new Date(),
+      }),
+    );
+  }
 
   beforeEach(() => {
     customer = createTestCustomer();
@@ -232,6 +305,8 @@ describe('Concurrent final-unit sales', () => {
     lotRepo = new FakeInventoryLotRepository();
     saleRepo = new FakeSaleRepository();
     cashRepo = new FakeCashLedgerRepository();
+    cashBoxRepo = new FakeCashBoxRepositoryConcurrent();
+    ensureOpenCashBox();
 
     useCase = new CreateSaleUseCase(customerRepo, variantRepo, productRepo);
   });
@@ -241,6 +316,7 @@ describe('Concurrent final-unit sales', () => {
       sales: saleRepo,
       inventoryLots: lotRepo,
       cashLedger: cashRepo,
+      cashBoxes: cashBoxRepo,
     });
   }
 

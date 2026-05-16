@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { CashClosing } from '../../../src/modules/accounting-reports/domain/CashClosing.js';
 import { CashLedgerEntry } from '../../../src/modules/accounting-reports/domain/CashLedgerEntry.js';
 import { CashLedgerEntryId } from '../../../src/modules/accounting-reports/domain/CashLedgerEntryId.js';
+import { CashBoxId } from '../../../src/modules/accounting-reports/domain/CashBoxId.js';
 import { Money } from '../../../src/shared/domain/Money.js';
 
 // ── CashClosing invariants ────────────────────────────────────
@@ -160,6 +161,60 @@ describe('CashEntry tags', () => {
   });
 });
 
+// ── CashLedgerEntry scoped fields (cashBoxId + concept) ────────
+
+describe('CashLedgerEntry scoped fields', () => {
+  it('creates legacy entry without cashBoxId or concept', () => {
+    const entry = new CashLedgerEntry(
+      CashLedgerEntryId.from('legacy-1'),
+      'SALE_INCOME',
+      Money.fromCents(5000),
+      'sale-legacy',
+      null,
+      new Date(),
+      null, // cashBoxId (null = legacy)
+      null, // concept (null = no description)
+    );
+
+    expect(entry.cashBoxId).toBeNull();
+    expect(entry.concept).toBeNull();
+  });
+
+  it('creates scoped entry with cashBoxId and concept', () => {
+    const cashBoxId = CashBoxId.from('box-123');
+    const entry = new CashLedgerEntry(
+      CashLedgerEntryId.from('scoped-1'),
+      'SALE_INCOME',
+      Money.fromCents(10000),
+      'sale-1',
+      null,
+      new Date(),
+      cashBoxId,
+      'Venta de productos varios',
+    );
+
+    expect(entry.cashBoxId).not.toBeNull();
+    expect(entry.cashBoxId!.equals(cashBoxId)).toBe(true);
+    expect(entry.concept).toBe('Venta de productos varios');
+  });
+
+  it('preserves immutability with new fields', () => {
+    const cashBoxId = CashBoxId.from('box-456');
+    const entry = new CashLedgerEntry(
+      CashLedgerEntryId.from('scoped-2'),
+      'MANUAL_ADJUSTMENT',
+      Money.fromCents(-500),
+      'adj-1',
+      null,
+      new Date(),
+      cashBoxId,
+      'Ajuste manual',
+    );
+
+    expect(Object.isFrozen(entry)).toBe(true);
+  });
+});
+
 // ── Helpers ───────────────────────────────────────────────────
 
 function makeEntry(
@@ -176,5 +231,7 @@ function makeEntry(
     sourceId ?? id,
     tag,
     new Date(),
+    null, // cashBoxId (legacy entries)
+    null, // concept
   );
 }

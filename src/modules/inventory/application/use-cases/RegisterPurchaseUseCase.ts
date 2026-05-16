@@ -14,6 +14,8 @@ import type { UnitOfWorkScope } from '../../../../shared/application/UnitOfWork.
 import type { InventoryLotRepository } from '../../domain/InventoryLotRepository.js';
 import type { PurchaseRepository } from '../../domain/PurchaseRepository.js';
 import type { CashLedgerRepository } from '../../../accounting-reports/domain/CashLedgerRepository.js';
+import type { CashBoxRepository } from '../../../accounting-reports/domain/CashBoxRepository.js';
+import { toLimaBusinessDate } from '../../../accounting-reports/domain/LimaBusinessDate.js';
 import { Purchase } from '../../domain/Purchase.js';
 import { PurchaseId } from '../../domain/PurchaseId.js';
 import { PurchaseLot } from '../../domain/PurchaseLot.js';
@@ -34,6 +36,7 @@ export interface PurchaseScope extends UnitOfWorkScope {
   inventoryLots: InventoryLotRepository;
   purchases: PurchaseRepository;
   cashLedger: CashLedgerRepository;
+  cashBoxes: CashBoxRepository;
 }
 
 // ── DTOs ─────────────────────────────────────────────────────
@@ -120,7 +123,18 @@ export class RegisterPurchaseUseCase {
         }
       }
 
-      // 2. Create purchase
+      // 2. Resolve today's OPEN cash box (enforce caja requirement)
+      const todayLima = toLimaBusinessDate(new Date());
+      const todayBox = await scope.cashBoxes.findByBusinessDate(todayLima);
+      if (!todayBox?.isOpen()) {
+        return err(
+          new BusinessRuleError(
+            'No se puede registrar una compra: la caja del día de hoy no está abierta',
+          ),
+        );
+      }
+
+      // 3. Create purchase
       const now = new Date();
       const purchaseDate = command.purchaseDate
         ? new Date(command.purchaseDate)
@@ -169,7 +183,7 @@ export class RegisterPurchaseUseCase {
       await scope.purchases.save(purchase);
       await scope.inventoryLots.saveMany(lots);
 
-      // 5. Create single cash ledger entry (total outflow)
+      // 6. Create single cash ledger entry (total outflow) scoped to open caja
       const totalCost = Money.fromCents(totalCents);
       const cashEntry = new CashLedgerEntry(
         CashLedgerEntryId.generate(),
@@ -178,6 +192,7 @@ export class RegisterPurchaseUseCase {
         purchaseId.toString(),
         'REINVESTMENT',
         now,
+        todayBox.id, // scope to today's open cash box
       );
       await scope.cashLedger.append(cashEntry);
 
