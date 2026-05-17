@@ -106,10 +106,43 @@ describe('GetCashBoxSummaryUseCase', () => {
       expect(result.value.manualAdjustmentsCents).toBe(300);
       // Withdrawals = -800
       expect(result.value.withdrawalsCents).toBe(-800);
-      // Net movement = 6000 - 2000 - 500 + 300 - 800 = 3000
-      expect(result.value.netMovementCents).toBe(3000);
-      // Current balance = opening 1000 + net 3000 = 4000
+      // Current balance = opening 1000 + signed movement (3000) = 4000
       expect(result.value.currentBalanceCents).toBe(4000);
+    });
+
+    it('includes netMovementCents in the response', async () => {
+      const box = createBox('box-no-net', 1000, 5000);
+      mockFindById.mockResolvedValue(box);
+      mockFindByCashBoxId.mockResolvedValue([
+        makeEntry('e1', 'SALE_INCOME', 3000, 'box-no-net'),
+      ]);
+
+      const result = await useCase.execute({ cashBoxId: 'box-no-net' });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // netMovementCents = sum of all signed movements (3000)
+      expect(result.value).toHaveProperty('netMovementCents');
+      expect(result.value.netMovementCents).toBe(3000);
+    });
+
+    it('handles negative manual adjustment correctly', async () => {
+      const box = createBox('box-neg-manual', 5000, 5000);
+      mockFindById.mockResolvedValue(box);
+      mockFindByCashBoxId.mockResolvedValue([
+        makeEntry('e1', 'SALE_INCOME', 4000, 'box-neg-manual'),
+        makeEntry('e2', 'MANUAL_ADJUSTMENT', -1000, 'box-neg-manual'),
+      ]);
+
+      const result = await useCase.execute({ cashBoxId: 'box-neg-manual' });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      // manualAdjustmentsCents = -1000 (negative adjustment)
+      expect(result.value.manualAdjustmentsCents).toBe(-1000);
+      // currentBalance = 5000 + (4000 + (-1000)) = 8000
+      expect(result.value.currentBalanceCents).toBe(8000);
     });
 
     it('returns summary with zero movements when no entries exist', async () => {
@@ -126,7 +159,6 @@ describe('GetCashBoxSummaryUseCase', () => {
       expect(result.value.grossSalesCents).toBe(0);
       expect(result.value.purchaseOutflowCents).toBe(0);
       expect(result.value.returnOutflowCents).toBe(0);
-      expect(result.value.netMovementCents).toBe(0);
       expect(result.value.currentBalanceCents).toBe(5000);
     });
 
@@ -156,7 +188,7 @@ describe('GetCashBoxSummaryUseCase', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value.grossSalesCents).toBe(2000);
-      expect(result.value.netMovementCents).toBe(2000);
+      expect(result.value.currentBalanceCents).toBe(2000);
     });
   });
 });

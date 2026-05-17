@@ -36,6 +36,10 @@ class FakeSaleRepository implements SaleRepository {
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
+  async findByIds(ids: SaleIdEntity[]): Promise<SaleEntity[]> {
+    return ids.map((id) => this.sales.get(id.toString())).filter(Boolean) as SaleEntity[];
+  }
+
   async findAll(): Promise<SaleEntity[]> {
     return Array.from(this.sales.values())
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());

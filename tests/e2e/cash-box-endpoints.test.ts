@@ -80,7 +80,7 @@ function createTestApp(): TestInfra {
 
   const openCashBoxUseCase = new OpenCashBoxUseCase(cashBoxRepo);
   const closeCashBoxUseCase = new CloseCashBoxUseCase(cashBoxRepo);
-  const getCurrentCashBoxUseCase = new GetCurrentCashBoxUseCase(cashBoxRepo);
+  const getCurrentCashBoxUseCase = new GetCurrentCashBoxUseCase(cashBoxRepo, cashLedgerRepo);
   const getCashBoxSummaryUseCase = new GetCashBoxSummaryUseCase(cashBoxRepo, cashLedgerRepo);
   const addManualMovementUseCase = new AddManualMovementUseCase(cashBoxRepo, cashLedgerRepo);
   const reverseMovementUseCase = new ReverseMovementUseCase(cashBoxRepo, cashLedgerRepo);
@@ -135,12 +135,13 @@ describe('Cash Box HTTP endpoints', () => {
   });
 
   describe('GET /api/v1/cash-boxes/current', () => {
-    it('returns 200 with current open cash box', async () => {
+    it('returns 200 with current open cash box including isCurrent', async () => {
       seedTodayBox(infra.cashBoxRepo, 'OPEN');
       const res = await request(app).get('/api/v1/cash-boxes/current');
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('OPEN');
       expect(res.body.openingBalanceCents).toBe(10000);
+      expect(res.body.isCurrent).toBe(true);
     });
 
     it('returns 404 when no open cash box exists', async () => {
@@ -217,7 +218,7 @@ describe('Cash Box HTTP endpoints', () => {
   });
 
   describe('GET /api/v1/cash-boxes/:id', () => {
-    it('returns 200 with cash box summary', async () => {
+    it('returns 200 with cash box summary including netMovementCents', async () => {
       infra.cashBoxRepo.boxes.clear();
       const box = seedTodayBox(infra.cashBoxRepo, 'OPEN');
       // Add a sale entry
@@ -232,6 +233,8 @@ describe('Cash Box HTTP endpoints', () => {
       expect(res.body.cashBoxId).toBe(box.id.toString());
       expect(res.body.grossSalesCents).toBe(5000);
       expect(res.body.currentBalanceCents).toBe(15000); // 10000 opening + 5000
+      // netMovementCents = sum of all signed movements (5000)
+      expect(res.body.netMovementCents).toBe(5000);
     });
 
     it('returns 404 for non-existent cash box', async () => {
@@ -302,6 +305,11 @@ describe('Cash Box HTTP endpoints', () => {
       expect(res.body.total).toBe(15);
       expect(res.body.page).toBe(1);
       expect(res.body.pageSize).toBe(5);
+      // All entries have profitCents field (null since no saleRepo in this test app)
+      for (const entry of res.body.entries) {
+        expect(entry).toHaveProperty('profitCents');
+        expect(entry.profitCents).toBeNull();
+      }
     });
 
     it('returns 404 for non-existent cash box', async () => {

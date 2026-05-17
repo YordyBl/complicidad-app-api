@@ -7,6 +7,10 @@
  * - Returns empty list when no entries exist
  * - Only returns entries for the requested cash box
  * - Filters entries by from/to date range
+ * - profitCents is null for non-sale entries or when no saleRepo wired
+ * - profitCents resolves Sale.grossProfit for positive SALE_INCOME entries
+ * - profitCents is null for negative SALE_INCOME (reversal/cancellation)
+ * - profitCents is null for unresolved sale (sourceId doesn't match)
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GetCashBoxMovementsUseCase } from '../../../src/modules/accounting-reports/application/use-cases/GetCashBoxMovementsUseCase.js';
@@ -16,6 +20,10 @@ import { CashLedgerEntry } from '../../../src/modules/accounting-reports/domain/
 import { CashLedgerEntryId } from '../../../src/modules/accounting-reports/domain/CashLedgerEntryId.js';
 import { NotFoundError } from '../../../src/shared/domain/errors.js';
 import { Money } from '../../../src/shared/domain/Money.js';
+import { Sale } from '../../../src/modules/sales-returns/domain/Sale.js';
+import { SaleId } from '../../../src/modules/sales-returns/domain/SaleId.js';
+import { SaleLine } from '../../../src/modules/sales-returns/domain/SaleLine.js';
+import { SaleLineId } from '../../../src/modules/sales-returns/domain/SaleLineId.js';
 
 describe('GetCashBoxMovementsUseCase', () => {
   const mockFindById = vi.fn();
@@ -37,10 +45,19 @@ describe('GetCashBoxMovementsUseCase', () => {
     findByCashBoxId: mockFindByCashBoxId,
   };
 
+  const mockSaleRepo = {
+    save: vi.fn(),
+    findById: vi.fn(),
+    findByCustomerId: vi.fn(),
+    findByIds: vi.fn(),
+    findAll: vi.fn(),
+  };
+
   let useCase: GetCashBoxMovementsUseCase;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: no saleRepo wired — all profitCents will be null
     useCase = new GetCashBoxMovementsUseCase(mockCashBoxRepo, mockCashLedgerRepo);
   });
 
@@ -63,12 +80,13 @@ describe('GetCashBoxMovementsUseCase', () => {
     type: 'SALE_INCOME' | 'PURCHASE_OUTFLOW' | 'MANUAL_ADJUSTMENT',
     amountCents: number,
     cashBoxId: string,
+    sourceId = 'source-1',
   ): CashLedgerEntry {
     return new CashLedgerEntry(
       CashLedgerEntryId.from(id),
       type,
       Money.fromCents(amountCents),
-      'source-1',
+      sourceId,
       null,
       new Date(),
       CashBoxId.from(cashBoxId),
@@ -378,6 +396,332 @@ describe('GetCashBoxMovementsUseCase', () => {
       expect(result.value.page).toBe(1);
       expect(result.value.pageSize).toBe(5);
       expect(result.value.totalPages).toBe(1);
+    });
+
+    describe('profitCents resolution', () => {
+      beforeEach(() => {
+        useCase = new GetCashBoxMovementsUseCase(
+          mockCashBoxRepo,
+          mockCashLedgerRepo,
+          mockSaleRepo,
+        );
+      });
+
+      it('returns profitCents as null for non-sale entries when saleRepo is wired', async () => {
+        const box = createBox('box-profit-1');
+        mockFindById.mockResolvedValue(box);
+        mockFindByCashBoxId.mockResolvedValue([
+          makeEntry('e1', 'PURCHASE_OUTFLOW', -2000, 'box-profit-1'),
+          makeEntry('e2', 'MANUAL_ADJUSTMENT', 300, 'box-profit-1'),
+        ]);
+        mockSaleRepo.findByIds.mockResolvedValue([]);
+
+        const result = await useCase.execute({ cashBoxId: 'box-profit-1' });
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.entries).toHaveLength(2);
+        expect(result.value.entries[0]!.profitCents).toBeNull();
+        expect(result.value.entries[1]!.profitCents).toBeNull();
+        expect(mockSaleRepo.findByIds).not.toHaveBeenCalled();
+      });
+
+      it('returns profitCents as null for RETURN_OUTFLOW entries', async () => {
+        const box = createBox('box-profit-return');
+        mockFindById.mockResolvedValue(box);
+        mockFindByCashBoxId.mockResolvedValue([
+          new CashLedgerEntry(
+            CashLedgerEntryId.from('e1'), 'RETURN_OUTFLOW',
+            Money.fromCents(-1500), 'return-1', null, new Date(),
+            CashBoxId.from('box-profit-return'), null,
+          ),
+        ]);
+
+        const result = await useCase.execute({ cashBoxId: 'box-profit-return' });
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.entries[0]!.profitCents).toBeNull();
+        expect(mockSaleRepo.findByIds).not.toHaveBeenCalled();
+      });
+
+      it('returns profitCents as null for WITHDRAWAL entries', async () => {
+        const box = createBox('box-profit-withdrawal');
+        mockFindById.mockResolvedValue(box);
+        mockFindByCashBoxId.mockResolvedValue([
+          new CashLedgerEntry(
+            CashLedgerEntryId.from('e1'), 'WITHDRAWAL',
+            Money.fromCents(-5000), 'withdraw-1', null, new Date(),
+            CashBoxId.from('box-profit-withdrawal'), null,
+          ),
+        ]);
+
+        const result = await useCase.execute({ cashBoxId: 'box-profit-withdrawal' });
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.entries[0]!.profitCents).toBeNull();
+        expect(mockSaleRepo.findByIds).not.toHaveBeenCalled();
+      });
+
+      it('returns profitCents as null for SALE_INCOME with blank sourceId', async () => {
+        const box = createBox('box-profit-blank-src');
+        mockFindById.mockResolvedValue(box);
+        mockFindByCashBoxId.mockResolvedValue([
+          new CashLedgerEntry(
+            CashLedgerEntryId.from('e1'), 'SALE_INCOME',
+            Money.fromCents(5000), '', null, new Date(),
+            CashBoxId.from('box-profit-blank-src'), null,
+          ),
+        ]);
+
+        const result = await useCase.execute({ cashBoxId: 'box-profit-blank-src' });
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.entries[0]!.profitCents).toBeNull();
+        // findByIds should NOT be called — blank sourceId is skipped before lookup
+        expect(mockSaleRepo.findByIds).not.toHaveBeenCalled();
+      });
+
+      it('returns profitCents as null for negative SALE_INCOME (reversal/cancellation)', async () => {
+        const box = createBox('box-profit-2');
+        mockFindById.mockResolvedValue(box);
+        mockFindByCashBoxId.mockResolvedValue([
+          makeEntry('e1', 'SALE_INCOME', -5000, 'box-profit-2'),
+        ]);
+        mockSaleRepo.findByIds.mockResolvedValue([]);
+
+        const result = await useCase.execute({ cashBoxId: 'box-profit-2' });
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.entries[0]!.profitCents).toBeNull();
+        expect(mockSaleRepo.findByIds).not.toHaveBeenCalled();
+      });
+
+      it('resolves profitCents from Sale.grossProfit for positive SALE_INCOME entries', async () => {
+        const saleId = 'sale-profit-1';
+        const box = createBox('box-profit-3');
+        mockFindById.mockResolvedValue(box);
+        mockFindByCashBoxId.mockResolvedValue([
+          makeEntry('e1', 'SALE_INCOME', 10000, 'box-profit-3', saleId),
+        ]);
+
+        // SaleLine with unitPrice=7000, qty=1, no consumptions → totalRevenue=7000, totalCost=0, grossProfit=7000
+        const saleLine = new SaleLine(
+          SaleLineId.generate(), 'variant-1', 1,
+          Money.fromCents(7000), 'regular', [],
+        );
+        const sale = new Sale(
+          SaleId.from(saleId), 'customer-1', undefined, 'whatsapp',
+          [saleLine], 'ACTIVE', new Date(), new Date(),
+        );
+        mockSaleRepo.findByIds.mockResolvedValue([sale]);
+
+        const result = await useCase.execute({ cashBoxId: 'box-profit-3' });
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.entries).toHaveLength(1);
+        expect(result.value.entries[0]!.profitCents).toBe(7000);
+        expect(mockSaleRepo.findByIds).toHaveBeenCalledWith([
+          SaleId.from(saleId),
+        ]);
+      });
+
+      it('returns profitCents null when sale is not found for sourceId', async () => {
+        const box = createBox('box-profit-4');
+        mockFindById.mockResolvedValue(box);
+        mockFindByCashBoxId.mockResolvedValue([
+          makeEntry('e1', 'SALE_INCOME', 5000, 'box-profit-4', 'missing-sale-id'),
+        ]);
+        mockSaleRepo.findByIds.mockResolvedValue([]);
+
+        const result = await useCase.execute({ cashBoxId: 'box-profit-4' });
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.entries[0]!.profitCents).toBeNull();
+      });
+
+      it('returns profitCents null when sale status is not ACTIVE', async () => {
+        const saleId = 'sale-cancelled';
+        const box = createBox('box-profit-5');
+        mockFindById.mockResolvedValue(box);
+        mockFindByCashBoxId.mockResolvedValue([
+          makeEntry('e1', 'SALE_INCOME', 5000, 'box-profit-5', saleId),
+        ]);
+
+        const saleLine = new SaleLine(
+          SaleLineId.generate(), 'variant-1', 1,
+          Money.fromCents(5000), 'regular', [],
+        );
+        const sale = new Sale(
+          SaleId.from(saleId), 'customer-1', undefined, 'whatsapp',
+          [saleLine], 'CANCELLED', new Date(), new Date(),
+        );
+        mockSaleRepo.findByIds.mockResolvedValue([sale]);
+
+        const result = await useCase.execute({ cashBoxId: 'box-profit-5' });
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.entries[0]!.profitCents).toBeNull();
+      });
+
+      it('resolves profitCents for multiple SALE_INCOME entries with batch lookup', async () => {
+        const saleId1 = 'sale-batch-1';
+        const saleId2 = 'sale-batch-2';
+        const box = createBox('box-profit-6');
+        mockFindById.mockResolvedValue(box);
+        mockFindByCashBoxId.mockResolvedValue([
+          makeEntry('e1', 'SALE_INCOME', 8000, 'box-profit-6', saleId1),
+          makeEntry('e2', 'PURCHASE_OUTFLOW', -2000, 'box-profit-6'),
+          makeEntry('e3', 'SALE_INCOME', 5000, 'box-profit-6', saleId2),
+          makeEntry('e4', 'SALE_INCOME', -3000, 'box-profit-6', 'reversal-sale'),
+        ]);
+
+        // Sale 1: unitPrice=6000, qty=1 → totalRevenue=6000, totalCost=0, grossProfit=6000
+        const line1 = new SaleLine(
+          SaleLineId.generate(), 'variant-1', 1,
+          Money.fromCents(6000), 'regular', [],
+        );
+        const sale1 = new Sale(
+          SaleId.from(saleId1), 'c1', undefined, 'whatsapp', [line1],
+          'ACTIVE', new Date(), new Date(),
+        );
+
+        // Sale 2: unitPrice=3500, qty=1 → totalRevenue=3500, totalCost=0, grossProfit=3500
+        const line2 = new SaleLine(
+          SaleLineId.generate(), 'variant-2', 1,
+          Money.fromCents(3500), 'regular', [],
+        );
+        const sale2 = new Sale(
+          SaleId.from(saleId2), 'c2', undefined, 'facebook', [line2],
+          'ACTIVE', new Date(), new Date(),
+        );
+
+        mockSaleRepo.findByIds.mockResolvedValue([sale1, sale2]);
+
+        const result = await useCase.execute({ cashBoxId: 'box-profit-6' });
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.entries).toHaveLength(4);
+
+        // e1 (SALE_INCOME 8000, sale1) → profit 6000
+        expect(result.value.entries[0]!.profitCents).toBe(6000);
+        // e2 (PURCHASE_OUTFLOW) → null
+        expect(result.value.entries[1]!.profitCents).toBeNull();
+        // e3 (SALE_INCOME 5000, sale2) → profit 3500
+        expect(result.value.entries[2]!.profitCents).toBe(3500);
+        // e4 (SALE_INCOME -3000, reversal) → null
+        expect(result.value.entries[3]!.profitCents).toBeNull();
+
+        // Batch lookup: should be called once with both sale IDs
+        expect(mockSaleRepo.findByIds).toHaveBeenCalledWith([
+          SaleId.from(saleId1),
+          SaleId.from(saleId2),
+        ]);
+      });
+
+      it('uses batch lookup (calls findByIds once, not findById N times)', async () => {
+        const box = createBox('box-profit-7');
+        mockFindById.mockResolvedValue(box);
+        mockFindByCashBoxId.mockResolvedValue([
+          makeEntry('e1', 'SALE_INCOME', 3000, 'box-profit-7', 'sale-a'),
+          makeEntry('e2', 'SALE_INCOME', 4000, 'box-profit-7', 'sale-b'),
+        ]);
+        const lineA = new SaleLine(
+          SaleLineId.generate(), 'variant-a', 1,
+          Money.fromCents(3000), 'regular', [],
+        );
+        const saleA = new Sale(
+          SaleId.from('sale-a'), 'c1', undefined, 'web', [lineA],
+          'ACTIVE', new Date(), new Date(),
+        );
+        const lineB = new SaleLine(
+          SaleLineId.generate(), 'variant-b', 1,
+          Money.fromCents(4000), 'regular', [],
+        );
+        const saleB = new Sale(
+          SaleId.from('sale-b'), 'c2', undefined, 'web', [lineB],
+          'ACTIVE', new Date(), new Date(),
+        );
+        mockSaleRepo.findByIds.mockResolvedValue([saleA, saleB]);
+
+        await useCase.execute({ cashBoxId: 'box-profit-7' });
+
+        // findByIds called ONCE with all IDs
+        expect(mockSaleRepo.findByIds).toHaveBeenCalledTimes(1);
+        // findById (singular) should NOT be called
+        expect(mockSaleRepo.findById).not.toHaveBeenCalled();
+      });
+
+      it('does NOT query profit for off-page sale entries (pagination boundary)', async () => {
+        const box = createBox('box-profit-offpage');
+        mockFindById.mockResolvedValue(box);
+
+        // 3 SALE_INCOME entries: 2 on page 1 (pageSize=2), 1 off-page
+        const lineA = new SaleLine(
+          SaleLineId.generate(), 'variant-a', 1,
+          Money.fromCents(3000), 'regular', [],
+        );
+        const saleA = new Sale(
+          SaleId.from('sale-page-1a'), 'c1', undefined, 'web', [lineA],
+          'ACTIVE', new Date(), new Date(),
+        );
+        const lineB = new SaleLine(
+          SaleLineId.generate(), 'variant-b', 1,
+          Money.fromCents(4000), 'regular', [],
+        );
+        const saleB = new Sale(
+          SaleId.from('sale-page-1b'), 'c2', undefined, 'web', [lineB],
+          'ACTIVE', new Date(), new Date(),
+        );
+        const lineC = new SaleLine(
+          SaleLineId.generate(), 'variant-c', 1,
+          Money.fromCents(5000), 'regular', [],
+        );
+        const saleC = new Sale(
+          SaleId.from('sale-off-page'), 'c3', undefined, 'web', [lineC],
+          'ACTIVE', new Date(), new Date(),
+        );
+
+        mockFindByCashBoxId.mockResolvedValue([
+          makeEntry('e1', 'SALE_INCOME', 3000, 'box-profit-offpage', 'sale-page-1a'),
+          makeEntry('e2', 'SALE_INCOME', 4000, 'box-profit-offpage', 'sale-page-1b'),
+          makeEntry('e3', 'SALE_INCOME', 5000, 'box-profit-offpage', 'sale-off-page'),
+        ]);
+
+        mockSaleRepo.findByIds.mockResolvedValue([saleA, saleB, saleC]);
+
+        // Request page 1 with pageSize=2 — only e1 and e2 are paged
+        const result = await useCase.execute({
+          cashBoxId: 'box-profit-offpage',
+          page: 1,
+          pageSize: 2,
+        });
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.entries).toHaveLength(2);
+        // Paged entries should have resolved profit
+        expect(result.value.entries[0]!.profitCents).toBe(3000);
+        expect(result.value.entries[1]!.profitCents).toBe(4000);
+        // Total should be 3 (all matching entries before pagination)
+        expect(result.value.total).toBe(3);
+        // But findByIds should only have been called with paged source IDs
+        expect(mockSaleRepo.findByIds).toHaveBeenCalledWith([
+          SaleId.from('sale-page-1a'),
+          SaleId.from('sale-page-1b'),
+        ]);
+        // The off-page sale 'sale-off-page' MUST NOT appear in the lookup
+        const calledWith = (mockSaleRepo.findByIds.mock.calls[0]?.[0] ?? []) as SaleId[];
+        const calledSourceIds = calledWith.map((s: SaleId) => s.toString());
+        expect(calledSourceIds).not.toContain('sale-off-page');
+      });
     });
   });
 });

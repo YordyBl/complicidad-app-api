@@ -23,12 +23,12 @@ export interface CashBoxSummaryResult {
   status: string;
   openingBalanceCents: number;
   currentBalanceCents: number;
+  netMovementCents: number;
   grossSalesCents: number;
   purchaseOutflowCents: number;
   returnOutflowCents: number;
   manualAdjustmentsCents: number;
   withdrawalsCents: number;
-  netMovementCents: number;
 }
 
 export class GetCashBoxSummaryUseCase {
@@ -77,14 +77,14 @@ export class GetCashBoxSummaryUseCase {
       }
     }
 
-    const netMovementCents =
+    const signedMovementCents =
       grossSalesCents +
       purchaseOutflowCents +
       returnOutflowCents +
       manualAdjustmentsCents +
       withdrawalsCents;
 
-    const currentBalanceCents = box.openingBalanceCents + netMovementCents;
+    const currentBalanceCents = box.openingBalanceCents + signedMovementCents;
 
     return ok({
       cashBoxId: box.id.toString(),
@@ -92,12 +92,12 @@ export class GetCashBoxSummaryUseCase {
       status: box.status,
       openingBalanceCents: box.openingBalanceCents,
       currentBalanceCents,
+      netMovementCents: signedMovementCents,
       grossSalesCents,
       purchaseOutflowCents,
       returnOutflowCents,
       manualAdjustmentsCents,
       withdrawalsCents,
-      netMovementCents,
     });
   }
 }

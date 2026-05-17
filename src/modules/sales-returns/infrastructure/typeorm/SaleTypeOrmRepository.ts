@@ -5,7 +5,7 @@
  * Phase 8: Added findByCustomerId for customer history derivation.
  * Phase 9: Added findAll with optional filters for listing sales.
  */
-import { Repository, type EntityManager, LessThanOrEqual, MoreThanOrEqual, Between, type FindOptionsWhere } from 'typeorm';
+import { Repository, type EntityManager, In, LessThanOrEqual, MoreThanOrEqual, Between, type FindOptionsWhere } from 'typeorm';
 import type { SaleRepository, SaleFilters } from '../../domain/SaleRepository.js';
 import type { Sale } from '../../domain/Sale.js';
 import type { SaleId } from '../../domain/SaleId.js';
@@ -38,6 +38,16 @@ export class SaleTypeOrmRepository implements SaleRepository {
       where: { customerId },
       relations: ['lines', 'lines.consumptions'],
       order: { createdAt: 'ASC' },
+    });
+    return entities.map((e) => this.mapper.toDomain(e));
+  }
+
+  async findByIds(ids: SaleId[]): Promise<Sale[]> {
+    if (ids.length === 0) return [];
+    const stringIds = ids.map((id) => id.toString());
+    const entities = await this.repo.find({
+      where: { id: In(stringIds) },
+      relations: ['lines', 'lines.consumptions'],
     });
     return entities.map((e) => this.mapper.toDomain(e));
   }

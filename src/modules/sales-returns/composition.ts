@@ -17,6 +17,7 @@ import { CustomerTypeOrmRepository } from '../customers/infrastructure/typeorm/C
 import { VariantTypeOrmRepository } from '../inventory/infrastructure/typeorm/VariantTypeOrmRepository.js';
 import { ProductTypeOrmRepository } from '../inventory/infrastructure/typeorm/ProductTypeOrmRepository.js';
 import { SaleTypeOrmRepository } from './infrastructure/typeorm/SaleTypeOrmRepository.js';
+import { TypeOrmSaleListItemReadRepository } from './infrastructure/typeorm/TypeOrmSaleListItemReadRepository.js';
 import { CreateSaleUseCase } from './application/use-cases/CreateSaleUseCase.js';
 import { CancelSaleUseCase } from './application/use-cases/CancelSaleUseCase.js';
 import { ReturnFullSaleUseCase } from './application/use-cases/ReturnFullSaleUseCase.js';
@@ -49,11 +50,14 @@ export function createSalesModule(manager?: EntityManager, uow?: UnitOfWork): Ro
   const productRepo = new ProductTypeOrmRepository(manager);
   const saleRepo = new SaleTypeOrmRepository(manager);
 
+  // Infrastructure — read-side
+  const saleItemReadRepo = new TypeOrmSaleListItemReadRepository(manager);
+
   // Application use cases
   const createSaleUseCase = new CreateSaleUseCase(customerRepo, variantRepo, productRepo);
   const cancelSaleUseCase = new CancelSaleUseCase();
   const returnFullSaleUseCase = new ReturnFullSaleUseCase();
-  const listSalesUseCase = new ListSalesUseCase(saleRepo);
+  const listSalesUseCase = new ListSalesUseCase(saleRepo, saleItemReadRepo);
   const getSaleDetailUseCase = new GetSaleDetailUseCase(saleRepo);
 
   // HTTP controller

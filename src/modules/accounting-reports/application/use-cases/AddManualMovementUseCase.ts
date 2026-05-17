@@ -68,12 +68,20 @@ export class AddManualMovementUseCase {
       return err(new BusinessRuleError('No hay una caja abierta'));
     }
 
+    // ── Normalize withdrawals to negative ──────────────────
+    // Clients send positive cents; the API persists/applies negative
+    // so WITHDRAWAL always reduces the cash balance.
+    const amountCents =
+      command.type === 'WITHDRAWAL'
+        ? -Math.abs(command.amountCents)
+        : command.amountCents;
+
     // ── Append entry ──────────────────────────────────────
     const now = new Date();
     const entry = new CashLedgerEntry(
       CashLedgerEntryId.generate(),
       command.type,
-      Money.fromCents(command.amountCents),
+      Money.fromCents(amountCents),
       'manual',
       null,
       now,
@@ -83,6 +91,7 @@ export class AddManualMovementUseCase {
 
     await this.cashLedgerRepo.append(entry);
 
+    // Return the NORMALIZED amount so callers see the effective ledger value
     return ok({
       id: entry.id.toString(),
       cashBoxId: box.id.toString(),

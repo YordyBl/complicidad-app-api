@@ -30,6 +30,13 @@ export interface SaleRepository {
   findByCustomerId(customerId: string): Promise<Sale[]>;
 
   /**
+   * Find sales by their unique identifiers (batch lookup).
+   * Returns only the sales that were found; missing IDs are silently skipped.
+   * Returns an empty array if none of the IDs match or if the input array is empty.
+   */
+  findByIds(ids: SaleId[]): Promise<Sale[]>;
+
+  /**
    * Find all sales with optional filters.
    * Returns full aggregates with lines and consumptions (same eager-load as findByCustomerId).
    */

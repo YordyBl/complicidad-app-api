@@ -163,6 +163,10 @@ class FakeSaleRepository implements SaleRepository {
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   }
 
+  async findByIds(ids: SaleIdEntity[]): Promise<SaleEntity[]> {
+    return ids.map((id) => this.sales.get(id.toString())).filter(Boolean) as SaleEntity[];
+  }
+
   async findAll(): Promise<SaleEntity[]> {
     return Array.from(this.sales.values())
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -516,6 +520,7 @@ describe('CreateSaleUseCase', () => {
       expect(cashRepo.entries[0]!.type).toBe('SALE_INCOME');
       expect(cashRepo.entries[0]!.amount.cents).toBe(16000);
       expect(cashRepo.entries[0]!.sourceId).toBe(result.value.saleId);
+      expect(cashRepo.entries[0]!.concept).toBe('Prenda vendida');
       expect(cashRepo.entries[0]!.cashBoxId?.toString()).toBe(currentCashBoxId);
     });
   });
@@ -774,6 +779,7 @@ describe('CreateSaleUseCase', () => {
       expect(cashRepo.entries[0]!.amount.cents).toBe(6000); // 3*2000
       expect(cashRepo.entries[0]!.amount.isPositive()).toBe(true);
       expect(cashRepo.entries[0]!.tag).toBeNull();
+      expect(cashRepo.entries[0]!.concept).toBe('Prenda vendida');
       expect(cashRepo.entries[0]!.cashBoxId?.toString()).toBe(currentCashBoxId);
     });
   });

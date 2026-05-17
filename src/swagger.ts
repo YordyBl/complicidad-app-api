@@ -292,7 +292,42 @@ export interface SaleResponse {
   createdAt: string;
 }
 
-export type SaleListResponse = SaleResponse[];
+/**
+ * Garment display row included in each sale list entry.
+ *
+ * The API computes `displayLabel` so that clients never need to
+ * infer labels from raw `variantId` values.
+ */
+export interface SaleListItemResponse {
+  lineId: string;
+  variantId: string;
+  productName: string | null;
+  sku: string | null;
+  /** Human-readable fallback: productName → SKU → "Variante sin datos". */
+  displayLabel: string;
+  attributes: Record<string, string>;
+  quantity: number;
+  unitPriceCents: number;
+  priceType: 'regular' | 'presale';
+}
+
+/** One sale entry returned by GET /sales (list view with garment display items). */
+export interface SaleListEntryResponse {
+  saleId: string;
+  customerId: string;
+  channelReference: string | null;
+  channel: string;
+  status: string;
+  totalRevenueCents: number;
+  totalCostCents: number;
+  grossProfitCents: number;
+  lineCount: number;
+  createdAt: string;
+  updatedAt: string;
+  items: SaleListItemResponse[];
+}
+
+export type SaleListResponse = SaleListEntryResponse[];
 
 export interface SaleFilters {
   customerId?: string;

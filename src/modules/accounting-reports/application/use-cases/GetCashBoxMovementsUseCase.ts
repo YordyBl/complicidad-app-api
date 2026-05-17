@@ -6,12 +6,19 @@
  *
  * Filtering is applied in-memory after fetching from the repository.
  * Future iterations may push filtering to the DB layer for large datasets.
+ *
+ * For SALE_INCOME entries, `profitCents` is resolved via batch lookup
+ * of the related Sale (sourceId -> Sale.id -> Sale.grossProfit).
+ * Non-sale entries and unresolved sales return `profitCents: null`.
  */
 import { type Result, ok, err } from '../../../../shared/domain/Result.js';
 import { NotFoundError } from '../../../../shared/domain/errors.js';
 import { CashBoxId } from '../../domain/CashBoxId.js';
 import type { CashBoxRepository } from '../../domain/CashBoxRepository.js';
 import type { CashLedgerRepository } from '../../domain/CashLedgerRepository.js';
+import type { SaleRepository } from '../../../sales-returns/domain/SaleRepository.js';
+import { SaleId } from '../../../sales-returns/domain/SaleId.js';
+import type { CashLedgerEntry } from '../../domain/CashLedgerEntry.js';
 
 export interface CashBoxMovementsCommand {
   cashBoxId: string;
@@ -36,6 +43,8 @@ export interface MovementEntryDto {
   sourceId: string;
   concept: string | null;
   createdAt: Date;
+  /** Gross profit in cents for real positive SALE_INCOME entries, null otherwise. */
+  profitCents: number | null;
 }
 
 export interface CashBoxMovementsResult {
@@ -57,6 +66,7 @@ export class GetCashBoxMovementsUseCase {
   constructor(
     private readonly cashBoxRepo: CashBoxRepository,
     private readonly cashLedgerRepo: CashLedgerRepository,
+    private readonly saleRepo?: SaleRepository,
   ) {}
 
   async execute(
@@ -105,6 +115,9 @@ export class GetCashBoxMovementsUseCase {
     const startIndex = (page - 1) * pageSize;
     const pagedEntries = filtered.slice(startIndex, startIndex + pageSize);
 
+    // ── Batch resolve profitCents only for paged SALE_INCOME entries ───
+    const profitMap = await this.resolveProfits(pagedEntries);
+
     return ok({
       cashBoxId: box.id.toString(),
       businessDate: box.businessDate,
@@ -116,11 +129,75 @@ export class GetCashBoxMovementsUseCase {
         sourceId: e.sourceId,
         concept: e.concept,
         createdAt: e.createdAt,
+        profitCents: profitMap.get(e.id.toString()) ?? null,
       })),
       total,
       page,
       pageSize,
       totalPages,
     });
+  }
+
+  /**
+   * Batch-resolve gross profit for real positive SALE_INCOME entries.
+   * Returns a map of entryId -> profitCents | null.
+   *
+   * Rules:
+   * - Non SALE_INCOME entries → null
+   * - SALE_INCOME with amountCents <= 0 (reversal/cancellation) → null
+   * - SALE_INCOME with amountCents > 0 → lookup Sale by sourceId
+   *   - Sale found and ACTIVE → Sale.grossProfit.cents
+   *   - Sale not found or not ACTIVE → null
+   * - If no saleRepo is wired, all entries return null
+   */
+  private async resolveProfits(
+    entries: CashLedgerEntry[],
+  ): Promise<Map<string, number | null>> {
+    const profitMap = new Map<string, number | null>();
+
+    // Collect SALE_INCOME entries with positive amounts that can be resolved.
+    // Guard against blank/missing sourceIds — EntityId rejects empty strings.
+    const resolvableEntries: { entryId: string; sourceId: string }[] = [];
+
+    for (const entry of entries) {
+      if (entry.type !== 'SALE_INCOME' || entry.amount.cents <= 0) {
+        profitMap.set(entry.id.toString(), null);
+      } else if (!this.saleRepo) {
+        profitMap.set(entry.id.toString(), null);
+      } else if (!entry.sourceId || entry.sourceId.trim().length === 0) {
+        // Missing/blank sourceId cannot be resolved — skip lookup
+        profitMap.set(entry.id.toString(), null);
+      } else {
+        resolvableEntries.push({
+          entryId: entry.id.toString(),
+          sourceId: entry.sourceId,
+        });
+      }
+    }
+
+    if (resolvableEntries.length === 0) {
+      return profitMap;
+    }
+
+    // saleRepo is guaranteed truthy when resolvableEntries is non-empty
+    // (the loop above only pushes to resolvableEntries when saleRepo is
+    // truthy), but TypeScript cannot narrow across loop iterations.
+    const saleRepo = this.saleRepo;
+    if (!saleRepo) return profitMap;
+
+    const saleIds = resolvableEntries.map((r) => SaleId.from(r.sourceId));
+    const sales = await saleRepo.findByIds(saleIds);
+    const saleBySourceId = new Map(sales.map((s) => [s.id.toString(), s]));
+
+    for (const { entryId, sourceId } of resolvableEntries) {
+      const sale = saleBySourceId.get(sourceId);
+      if (sale?.status === 'ACTIVE') {
+        profitMap.set(entryId, sale.grossProfit.cents);
+      } else {
+        profitMap.set(entryId, null);
+      }
+    }
+
+    return profitMap;
   }
 }

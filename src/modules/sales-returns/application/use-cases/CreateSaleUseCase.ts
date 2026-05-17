@@ -311,7 +311,7 @@ export class CreateSaleUseCase {
         null,
         now,
         todayBox.id,
-        null,
+        'Prenda vendida',
       );
       await scope.cashLedger.append(cashEntry);
 

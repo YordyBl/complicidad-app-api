@@ -13,6 +13,7 @@ import { CashClosingTypeOrmRepository } from './infrastructure/typeorm/CashClosi
 import { ReportQueryAdapter } from './infrastructure/typeorm/ReportQueryAdapter.js';
 import { CashBoxTypeOrmRepository } from './infrastructure/typeorm/CashBoxTypeOrmRepository.js';
 import { CashLedgerTypeOrmRepository } from './infrastructure/typeorm/CashLedgerTypeOrmRepository.js';
+import { SaleTypeOrmRepository } from '../sales-returns/infrastructure/typeorm/SaleTypeOrmRepository.js';
 import { ManualCashCloseUseCase } from './application/use-cases/ManualCashCloseUseCase.js';
 import { GetLiquidityUseCase } from './application/use-cases/GetLiquidityUseCase.js';
 import { GetStockInvestmentUseCase } from './application/use-cases/GetStockInvestmentUseCase.js';
@@ -60,6 +61,9 @@ export function createAccountingModule(manager?: EntityManager): Router {
   const cashBoxRepo = new CashBoxTypeOrmRepository(manager);
   const cashLedgerRepo = new CashLedgerTypeOrmRepository(manager);
 
+  // Infrastructure — cross-module (sale profit resolution for movement entries)
+  const saleRepo = new SaleTypeOrmRepository(manager);
+
   // ── Report use cases ──────────────────────────────────────
   const getLiquidityUseCase = new GetLiquidityUseCase(reportRepo);
   const getStockInvestmentUseCase = new GetStockInvestmentUseCase(reportRepo);
@@ -75,11 +79,11 @@ export function createAccountingModule(manager?: EntityManager): Router {
   // ── Cash box use cases ────────────────────────────────────
   const openCashBoxUseCase = new OpenCashBoxUseCase(cashBoxRepo);
   const closeCashBoxUseCase = new CloseCashBoxUseCase(cashBoxRepo);
-  const getCurrentCashBoxUseCase = new GetCurrentCashBoxUseCase(cashBoxRepo);
+  const getCurrentCashBoxUseCase = new GetCurrentCashBoxUseCase(cashBoxRepo, cashLedgerRepo);
   const getCashBoxSummaryUseCase = new GetCashBoxSummaryUseCase(cashBoxRepo, cashLedgerRepo);
   const addManualMovementUseCase = new AddManualMovementUseCase(cashBoxRepo, cashLedgerRepo);
   const reverseMovementUseCase = new ReverseMovementUseCase(cashBoxRepo, cashLedgerRepo);
-  const getCashBoxMovementsUseCase = new GetCashBoxMovementsUseCase(cashBoxRepo, cashLedgerRepo);
+  const getCashBoxMovementsUseCase = new GetCashBoxMovementsUseCase(cashBoxRepo, cashLedgerRepo, saleRepo);
 
   // HTTP controllers
   const reportController = new ReportController(

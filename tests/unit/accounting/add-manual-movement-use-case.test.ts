@@ -83,12 +83,57 @@ describe('AddManualMovementUseCase', () => {
       expect(savedEntry.cashBoxId?.toString()).toBe('box-mm-1');
     });
 
-    it('appends a WITHDRAWAL with negative amount to the current open box', async () => {
+    it('accepts positive WITHDRAWAL input and normalizes it to negative cents', async () => {
+      // Spec: clients send positive cents for WITHDRAWAL; API normalizes to negative.
       const box = createOpenBox('box-mm-2');
       mockFindCurrent.mockResolvedValue(box);
 
       const result = await useCase.execute({
         concept: 'Retiro de efectivo',
+        amountCents: 1000,
+        type: 'WITHDRAWAL',
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // The stored and returned amount must be negative (the API normalizes it).
+      expect(result.value.type).toBe('WITHDRAWAL');
+      expect(result.value.amountCents).toBe(-1000);
+
+      // Verify the entry was persisted with negative amount
+      expect(mockAppend).toHaveBeenCalledTimes(1);
+      const savedEntry = mockAppend.mock.calls[0]?.[0];
+      expect(savedEntry.type).toBe('WITHDRAWAL');
+      expect(savedEntry.amount.cents).toBe(-1000);
+      expect(savedEntry.concept).toBe('Retiro de efectivo');
+    });
+
+    it('normalizes a WITHDRAWAL with a different positive amount', async () => {
+      const box = createOpenBox('box-mm-2b');
+      mockFindCurrent.mockResolvedValue(box);
+
+      const result = await useCase.execute({
+        concept: 'Retiro grande',
+        amountCents: 5000,
+        type: 'WITHDRAWAL',
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.amountCents).toBe(-5000);
+      const savedEntry = mockAppend.mock.calls[0]?.[0];
+      expect(savedEntry.amount.cents).toBe(-5000);
+    });
+
+    it('still normalizes WITHDRAWAL to negative even when already sent as negative', async () => {
+      // For backward compatibility: clients still sending negative receive negative.
+      const box = createOpenBox('box-mm-2c');
+      mockFindCurrent.mockResolvedValue(box);
+
+      const result = await useCase.execute({
+        concept: 'Retiro (ya negativo)',
         amountCents: -1000,
         type: 'WITHDRAWAL',
       });
@@ -96,8 +141,48 @@ describe('AddManualMovementUseCase', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      expect(result.value.type).toBe('WITHDRAWAL');
+      // -Math.abs(-1000) = -1000 — still negative, correct
       expect(result.value.amountCents).toBe(-1000);
+      const savedEntry = mockAppend.mock.calls[0]?.[0];
+      expect(savedEntry.amount.cents).toBe(-1000);
+    });
+
+    it('keeps MANUAL_ADJUSTMENT sign unchanged (positive stays positive)', async () => {
+      const box = createOpenBox('box-mm-2d');
+      mockFindCurrent.mockResolvedValue(box);
+
+      const result = await useCase.execute({
+        concept: 'Ajuste positivo',
+        amountCents: 3000,
+        type: 'MANUAL_ADJUSTMENT',
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.amountCents).toBe(3000);
+      const savedEntry = mockAppend.mock.calls[0]?.[0];
+      expect(savedEntry.type).toBe('MANUAL_ADJUSTMENT');
+      expect(savedEntry.amount.cents).toBe(3000);
+    });
+
+    it('keeps MANUAL_ADJUSTMENT sign unchanged (negative stays negative)', async () => {
+      const box = createOpenBox('box-mm-2e');
+      mockFindCurrent.mockResolvedValue(box);
+
+      const result = await useCase.execute({
+        concept: 'Ajuste negativo',
+        amountCents: -500,
+        type: 'MANUAL_ADJUSTMENT',
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.amountCents).toBe(-500);
+      const savedEntry = mockAppend.mock.calls[0]?.[0];
+      expect(savedEntry.type).toBe('MANUAL_ADJUSTMENT');
+      expect(savedEntry.amount.cents).toBe(-500);
     });
 
     it('rejects when no open cash box exists', async () => {

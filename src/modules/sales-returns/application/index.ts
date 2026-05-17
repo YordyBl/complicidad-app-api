@@ -23,7 +23,7 @@ export type {
 } from './use-cases/ReturnFullSaleUseCase.js';
 
 export { ListSalesUseCase } from './use-cases/ListSalesUseCase.js';
-export type { SaleSummary } from './use-cases/ListSalesUseCase.js';
+export type { SaleSummary, SaleWithItems } from './use-cases/ListSalesUseCase.js';
 
 export { GetSaleDetailUseCase } from './use-cases/GetSaleDetailUseCase.js';
 export type {
