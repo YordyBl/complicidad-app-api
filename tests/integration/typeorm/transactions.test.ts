@@ -11,6 +11,7 @@ import {
   createDataSource,
   closeDataSource,
   TypeOrmUnitOfWork,
+  TypeOrmUnitOfWorkScope,
 } from '../../../src/infrastructure/typeorm/index.js';
 import type { UnitOfWorkScope } from '../../../src/shared/application/UnitOfWork.js';
 
@@ -107,10 +108,11 @@ describe('TypeORM UnitOfWork transaction boundaries', () => {
       );
 
       try {
-        // Successful transaction inserts 1 row
+        // Successful transaction inserts 1 row using the transactional scope
         await uow.run(
-          async (_scope: UnitOfWorkScope) => {
-            await ds.query(
+          async (scope: UnitOfWorkScope) => {
+            const s = scope as TypeOrmUnitOfWorkScope;
+            await s.query(
               'INSERT INTO test_counter (id, val) VALUES (1, 100)',
             );
           },
@@ -119,8 +121,9 @@ describe('TypeORM UnitOfWork transaction boundaries', () => {
         // Failed transaction tries to insert another row but rolls back
         await expect(
           uow.run(
-            async (_scope: UnitOfWorkScope) => {
-              await ds.query(
+            async (scope: UnitOfWorkScope) => {
+              const s = scope as TypeOrmUnitOfWorkScope;
+              await s.query(
                 'INSERT INTO test_counter (id, val) VALUES (2, 200)',
               );
               throw new Error('rollback');

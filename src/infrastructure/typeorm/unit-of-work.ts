@@ -40,6 +40,15 @@ export class TypeOrmUnitOfWorkScope implements UnitOfWorkScope {
     this.purchases = new PurchaseTypeOrmRepository(manager);
     this.cashBoxes = new CashBoxTypeOrmRepository(manager);
   }
+
+  /**
+   * Execute a raw SQL query using the transactional EntityManager.
+   * All operations performed through this method participate in the
+   * UnitOfWork's transaction (commit/rollback).
+   */
+  async query<T = unknown>(sql: string, parameters?: unknown[]): Promise<T> {
+    return this.manager.query(sql, parameters);
+  }
 }
 
 /**
