@@ -63,19 +63,8 @@ export class CashBoxController {
 
   // ── POST /cash-boxes/current/close ──────────────────────────
 
-  async close(req: Request, res: Response): Promise<void> {
-    const { finalBalanceCents } = req.body as Record<string, unknown>;
-    if (typeof finalBalanceCents !== 'number' || !Number.isInteger(finalBalanceCents)) {
-      res.status(400).json({
-        error: 'ValidationError',
-        message: 'finalBalanceCents es obligatorio y debe ser un número entero de centavos',
-      });
-      return;
-    }
-
-    const result = await this.closeCashBoxUseCase.execute({
-      finalBalanceCents,
-    });
+  async close(_req: Request, res: Response): Promise<void> {
+    const result = await this.closeCashBoxUseCase.execute({});
     if (!result.ok) {
       res.status(400).json({ error: result.error.name, message: result.error.message });
       return;

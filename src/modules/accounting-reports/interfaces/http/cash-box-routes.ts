@@ -37,21 +37,9 @@
  *     tags:
  *       - Cash Boxes
  *     summary: Close the current cash box
- *     description: Closes today's open caja with a final reconciliation balance.
+ *     description: Closes today's open caja. The final balance is derived from the authoritative cash ledger (openingBalanceCents + sum of all entries). No request body is required.
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - finalBalanceCents
- *             properties:
- *               finalBalanceCents:
- *                 type: integer
- *                 description: Final balance in integer cents
  *     responses:
  *       200:
  *         description: Cash box closed

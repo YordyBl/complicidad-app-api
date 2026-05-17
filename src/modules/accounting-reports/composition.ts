@@ -78,7 +78,7 @@ export function createAccountingModule(manager?: EntityManager): Router {
 
   // ── Cash box use cases ────────────────────────────────────
   const openCashBoxUseCase = new OpenCashBoxUseCase(cashBoxRepo);
-  const closeCashBoxUseCase = new CloseCashBoxUseCase(cashBoxRepo);
+  const closeCashBoxUseCase = new CloseCashBoxUseCase(cashBoxRepo, cashLedgerRepo);
   const getCurrentCashBoxUseCase = new GetCurrentCashBoxUseCase(cashBoxRepo, cashLedgerRepo);
   const getCashBoxSummaryUseCase = new GetCashBoxSummaryUseCase(cashBoxRepo, cashLedgerRepo);
   const addManualMovementUseCase = new AddManualMovementUseCase(cashBoxRepo, cashLedgerRepo);

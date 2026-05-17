@@ -1,19 +1,18 @@
 /**
  * Application use case: Close Cash Box.
  *
- * Closes the current OPEN cash box with a final balance.
- * The final balance may differ from currentBalanceCents (reconciliation).
+ * Closes the current OPEN cash box, deriving the final balance from the
+ * authoritative cash ledger (openingBalanceCents + sum of all ledger entries).
+ * The client-provided finalBalanceCents is NEVER trusted as source of truth.
  *
- * Rejects when no open cash box exists.
+ * Rejects when no open cash box exists or the box is already closed.
  */
 import { type Result, ok, err } from '../../../../shared/domain/Result.js';
 import { BusinessRuleError } from '../../../../shared/domain/errors.js';
 import type { CashBoxRepository } from '../../domain/CashBoxRepository.js';
+import type { CashLedgerRepository } from '../../domain/CashLedgerRepository.js';
 
-export interface CloseCashBoxCommand {
-  /** Final balance in integer cents after reconciliation. */
-  finalBalanceCents: number;
-}
+export type CloseCashBoxCommand = Record<string, never>;
 
 export interface CloseCashBoxResult {
   id: string;
@@ -23,10 +22,13 @@ export interface CloseCashBoxResult {
 }
 
 export class CloseCashBoxUseCase {
-  constructor(private readonly cashBoxRepo: CashBoxRepository) {}
+  constructor(
+    private readonly cashBoxRepo: CashBoxRepository,
+    private readonly cashLedgerRepo: CashLedgerRepository,
+  ) {}
 
   async execute(
-    command: CloseCashBoxCommand,
+    _command: CloseCashBoxCommand,
   ): Promise<Result<CloseCashBoxResult, BusinessRuleError>> {
     // 1. Find the current OPEN box
     const box = await this.cashBoxRepo.findCurrent();
@@ -37,16 +39,15 @@ export class CloseCashBoxUseCase {
       );
     }
 
-    // 2. Validate final balance is integer
-    if (!Number.isInteger(command.finalBalanceCents)) {
-      return err(
-        new BusinessRuleError('El saldo final debe ser un número entero de centavos'),
-      );
-    }
+    // 2. Derive final balance from the authoritative ledger:
+    //    openingBalanceCents + sum of all ledger entries for this box
+    const entries = await this.cashLedgerRepo.findByCashBoxId(box.id.toString());
+    const sumCents = entries.reduce((sum, e) => sum + e.amount.cents, 0);
+    const finalBalanceCents = box.openingBalanceCents + sumCents;
 
     // 3. Close the box (domain method validates already-closed state)
     try {
-      const closed = box.close(command.finalBalanceCents);
+      const closed = box.close(finalBalanceCents);
       await this.cashBoxRepo.save(closed);
 
       return ok({

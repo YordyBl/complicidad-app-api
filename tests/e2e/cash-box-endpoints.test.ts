@@ -79,7 +79,7 @@ function createTestApp(): TestInfra {
   const cashLedgerRepo = new FakeCashLedgerRepo();
 
   const openCashBoxUseCase = new OpenCashBoxUseCase(cashBoxRepo);
-  const closeCashBoxUseCase = new CloseCashBoxUseCase(cashBoxRepo);
+  const closeCashBoxUseCase = new CloseCashBoxUseCase(cashBoxRepo, cashLedgerRepo);
   const getCurrentCashBoxUseCase = new GetCurrentCashBoxUseCase(cashBoxRepo, cashLedgerRepo);
   const getCashBoxSummaryUseCase = new GetCashBoxSummaryUseCase(cashBoxRepo, cashLedgerRepo);
   const addManualMovementUseCase = new AddManualMovementUseCase(cashBoxRepo, cashLedgerRepo);
@@ -174,21 +174,70 @@ describe('Cash Box HTTP endpoints', () => {
   });
 
   describe('POST /api/v1/cash-boxes/current/close', () => {
-    it('returns 200 when closing an open cash box', async () => {
-      seedTodayBox(infra.cashBoxRepo, 'OPEN');
+    it('returns 200 when closing an open cash box (balance derived from ledger)', async () => {
+      infra.cashBoxRepo.boxes.clear();
+      infra.cashLedgerRepo.entries = [];
+      const box = seedTodayBox(infra.cashBoxRepo, 'OPEN');
+      // Add a ledger entry so final balance differs from opening
+      void infra.cashLedgerRepo.append(new CashLedgerEntry(
+        CashLedgerEntryId.generate(), 'SALE_INCOME',
+        Money.fromCents(3500), 'sale-1', null, new Date(),
+        box.id, null,
+      ));
+
       const res = await request(app)
         .post('/api/v1/cash-boxes/current/close')
-        .send({ finalBalanceCents: 9500 });
+        .send({});
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('CLOSED');
-      expect(res.body.finalBalanceCents).toBe(9500);
+      // openingBalanceCents=10000 + sale=3500 = 13500
+      expect(res.body.finalBalanceCents).toBe(13500);
+    });
+
+    it('ignores client-supplied finalBalanceCents and uses ledger-derived balance', async () => {
+      infra.cashBoxRepo.boxes.clear();
+      infra.cashLedgerRepo.entries = [];
+      // Construct box with stale currentBalanceCents snapshot (5000 != real ledger 13500)
+      const box = new CashBox({
+        id: CashBoxId.generate(),
+        businessDate: toLimaBusinessDate(new Date()),
+        status: 'OPEN',
+        openingBalanceCents: 10000,
+        currentBalanceCents: 5000, // stale snapshot — deliberately different from ledger reality
+        finalBalanceCents: null,
+        closedAt: null,
+        legacy: false,
+        createdAt: new Date(),
+      });
+      void infra.cashBoxRepo.save(box);
+
+      // Add a ledger entry so real ledger-derived balance = 10000 + 3500 = 13500
+      void infra.cashLedgerRepo.append(new CashLedgerEntry(
+        CashLedgerEntryId.generate(), 'SALE_INCOME',
+        Money.fromCents(3500), 'sale-1', null, new Date(),
+        box.id, null,
+      ));
+
+      // Send a conflicting client-supplied finalBalanceCents value
+      const res = await request(app)
+        .post('/api/v1/cash-boxes/current/close')
+        .send({ finalBalanceCents: 99999 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('CLOSED');
+      // Must be ledger-derived (10000 + 3500 = 13500), NOT the client-supplied 99999
+      expect(res.body.finalBalanceCents).toBe(13500);
+
+      // Persisted box must also store the ledger-derived value
+      const persisted = infra.cashBoxRepo.boxes.get(box.id.toString());
+      expect(persisted?.finalBalanceCents).toBe(13500);
     });
 
     it('returns 400 when no open cash box exists', async () => {
       infra.cashBoxRepo.boxes.clear();
       const res = await request(app)
         .post('/api/v1/cash-boxes/current/close')
-        .send({ finalBalanceCents: 0 });
+        .send({});
       expect(res.status).toBe(400);
     });
   });
