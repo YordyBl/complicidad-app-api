@@ -201,5 +201,21 @@ export function createInventoryRouter(
     void inventoryController.registerPurchase(req, res).catch(next);
   });
 
+  // ── Lot adjustment endpoints ───────────────────────────────
+  // Increase: create new lot with stock
+  router.post('/inventory/lots/adjustments/increase', (req, res, next) => {
+    void inventoryController.adjustIncrease(req, res).catch(next);
+  });
+
+  // Intact direct edit
+  router.patch('/inventory/lots/:lotId', (req, res, next) => {
+    void inventoryController.patchLot(req, res).catch(next);
+  });
+
+  // Historical compensation
+  router.post('/inventory/lots/:lotId/adjustments', (req, res, next) => {
+    void inventoryController.adjustHistorical(req, res).catch(next);
+  });
+
   return router;
 }

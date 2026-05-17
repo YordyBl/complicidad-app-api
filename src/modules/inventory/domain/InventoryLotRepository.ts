@@ -38,4 +38,16 @@ export interface InventoryLotRepository {
 
   /** Delete a lot by id. */
   delete(id: PurchaseLotId): Promise<void>;
+
+  /**
+   * Find a lot by id with a pessimistic write lock (SELECT ... FOR UPDATE).
+   * Used inside transactions to prevent concurrent adjustments on the same lot.
+   */
+  findByIdForUpdate(id: PurchaseLotId): Promise<PurchaseLot | null>;
+
+  /**
+   * Check whether any consumption records (sales, returns, cancellations)
+   * reference this lot. Used by the intact-edit eligibility check.
+   */
+  hasConsumptionRecords(lotId: PurchaseLotId): Promise<boolean>;
 }

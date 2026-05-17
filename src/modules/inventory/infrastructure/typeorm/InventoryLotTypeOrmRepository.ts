@@ -65,4 +65,22 @@ export class InventoryLotTypeOrmRepository implements InventoryLotRepository {
   async delete(id: PurchaseLotId): Promise<void> {
     await this.repo.delete(id.toString());
   }
+
+  async findByIdForUpdate(id: PurchaseLotId): Promise<PurchaseLot | null> {
+    const entity = await this.repo.findOne({
+      where: { id: id.toString() },
+      lock: { mode: 'pessimistic_write' },
+    });
+    return entity ? this.mapper.toDomain(entity) : null;
+  }
+
+  async hasConsumptionRecords(lotId: PurchaseLotId): Promise<boolean> {
+    // Check the lot_consumption_records table (sales-returns module)
+    // for any rows referencing this purchase lot.
+    const result: unknown[] = await this.repo.manager.query(
+      'SELECT 1 FROM lot_consumption_records WHERE purchase_lot_id = $1 LIMIT 1',
+      [lotId.toString()],
+    );
+    return result.length > 0;
+  }
 }
