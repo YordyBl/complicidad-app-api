@@ -7,3 +7,5 @@ export { InvalidQuantityError } from './use-cases/RegisterPurchaseUseCase.js';
 export { ListProductsUseCase } from './use-cases/ListProductsUseCase.js';
 export type { ListProductsInput } from './use-cases/ListProductsUseCase.js';
 export { GetProductByIdUseCase } from './use-cases/GetProductByIdUseCase.js';
+export { AdjustInventoryLotUseCase } from './use-cases/AdjustInventoryLotUseCase.js';
+export type { AdjustInventoryLotCommand, AdjustInventoryLotResponse, InventoryAdjustmentScope } from './use-cases/AdjustInventoryLotUseCase.js';

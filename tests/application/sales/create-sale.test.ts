@@ -144,6 +144,12 @@ class FakeInventoryLotRepository implements InventoryLotRepository {
   async delete(id: PurchaseLotId): Promise<void> {
     this.lots.delete(id.toString());
   }
+
+  async findByIdForUpdate(id: PurchaseLotId): Promise<PurchaseLot | null> {
+    return this.lots.get(id.toString()) ?? null;
+  }
+
+  async hasConsumptionRecords(): Promise<boolean> { return false; }
 }
 
 class FakeSaleRepository implements SaleRepository {

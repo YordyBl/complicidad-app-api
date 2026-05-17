@@ -19,3 +19,8 @@ export type { SupplierRepository } from './SupplierRepository.js';
 export type { PurchaseRepository } from './PurchaseRepository.js';
 export type { InventoryLotRepository } from './InventoryLotRepository.js';
 export type { ProductListReadRepository, ListProductsQuery, ListProductsResult, ProductListItem, ProductVariantSummary, ListProductsMeta, ListProductsFilters } from './ProductListReadRepository.js';
+export { isLotIntact } from './services/LotAdjustmentPolicy.js';
+export { InventoryLotAdjustmentId } from './InventoryLotAdjustmentId.js';
+export { InventoryLotAdjustment, InventoryLotAdjustmentError } from './InventoryLotAdjustment.js';
+export type { AdjustmentAction, AdjustmentSnapshot } from './InventoryLotAdjustment.js';
+export type { InventoryLotAdjustmentRepository } from './InventoryLotAdjustmentRepository.js';

@@ -28,6 +28,7 @@ import { CashBoxEntity } from '../../modules/accounting-reports/infrastructure/t
 import { CashClosingEntity } from '../../modules/accounting-reports/infrastructure/typeorm/CashClosingEntity.js';
 import { CashLedgerEntryEntity } from '../../modules/accounting-reports/infrastructure/typeorm/CashLedgerEntryEntity.js';
 import { UserEntity } from '../../modules/auth-users/infrastructure/typeorm/UserEntity.js';
+import { InventoryLotAdjustmentEntity } from '../../modules/inventory/infrastructure/typeorm/InventoryLotAdjustmentEntity.js';
 
 let dataSource: DataSource | null = null;
 
@@ -47,6 +48,7 @@ const dataSourceOptions: DataSourceOptions = {
     CashClosingEntity,
     CashLedgerEntryEntity,
     UserEntity,
+    InventoryLotAdjustmentEntity,
   ],
   migrations: ['src/infrastructure/typeorm/migrations/**/*.ts'],
 };

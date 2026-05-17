@@ -164,6 +164,8 @@ class FakeInventoryLotRepo implements InventoryLotRepository {
   async save(lot: PurchaseLot): Promise<void> { this.lots.set(lot.id.toString(), lot); }
   async saveMany(lots: PurchaseLot[]): Promise<void> { for (const l of lots) this.lots.set(l.id.toString(), l); }
   async delete(id: PurchaseLotId): Promise<void> { this.lots.delete(id.toString()); }
+  async findByIdForUpdate(id: PurchaseLotId): Promise<PurchaseLot | null> { return this.lots.get(id.toString()) ?? null; }
+  async hasConsumptionRecords(): Promise<boolean> { return false; }
 }
 
 class FakePurchaseRepo implements PurchaseRepository {

@@ -116,9 +116,11 @@ class FakeInventoryLotRepository implements InventoryLotRepository {
     return this.lotsByVariant.get(variantId.toString()) ?? [];
   }
 
-  async save(): Promise<void> {}
-  async saveMany(): Promise<void> {}
-  async delete(): Promise<void> {}
+  async save(): Promise<void> { /* noop */ }
+  async saveMany(): Promise<void> { /* noop */ }
+  async delete(): Promise<void> { /* noop */ }
+  async findByIdForUpdate(): Promise<PurchaseLot | null> { return null; }
+  async hasConsumptionRecords(): Promise<boolean> { return false; }
 }
 
 // ── Helpers ──────────────────────────────────────────────────
