@@ -38,7 +38,7 @@ import { SaleId as SaleIdEntity } from '../../../src/modules/sales-returns/domai
 import { SaleLine } from '../../../src/modules/sales-returns/domain/SaleLine.js';
 import { SaleLineId } from '../../../src/modules/sales-returns/domain/SaleLineId.js';
 import { LotConsumptionRecord } from '../../../src/modules/sales-returns/domain/LotConsumptionRecord.js';
-import { SaleStatusError } from '../../../src/modules/sales-returns/domain/Sale.js';
+import { SaleStatusError, SalePaymentError } from '../../../src/modules/sales-returns/domain/Sale.js';
 
 // ── Scope type ───────────────────────────────────────────────
 
@@ -425,6 +425,85 @@ describe('CancelSaleUseCase', () => {
     });
   });
 
+  describe('payment guard — unpaid sales cannot be cancelled', () => {
+    it('rejects cancelling a sale with paymentStatus pending', async () => {
+      const c = makeConsumption('c1', 'lot-a', 5, 200);
+      const line = new SaleLine(
+        SaleLineId.from('line-1'), 'v1', 5, Money.fromCents(1000), 'regular', [c],
+      );
+      const sale = new SaleEntity(
+        SaleIdEntity.from('pending-cancel'),
+        'customer-1',
+        'ref-1',
+        'web',
+        [line],
+        'ACTIVE',
+        new Date('2026-01-15'),
+        new Date('2026-01-15'),
+        Money.ZERO,
+        Money.fromCents(5000),
+        'pending',
+        null,
+      );
+
+      saleRepo.sales.set('pending-cancel', sale);
+      const lotA = makeTestLot('lot-a', 'v1', 20, 15, 200);
+      lotRepo.lots.set('lot-a', lotA);
+
+      const result = await useCase.execute({ saleId: 'pending-cancel' }, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBeInstanceOf(SalePaymentError);
+      expect(result.error.message).toContain('pagada');
+    });
+
+    it('rejects cancelling a sale with paymentStatus partial', async () => {
+      const c = makeConsumption('c1', 'lot-b', 3, 300);
+      const line = new SaleLine(
+        SaleLineId.from('line-1'), 'v1', 3, Money.fromCents(1000), 'regular', [c],
+      );
+      const sale = new SaleEntity(
+        SaleIdEntity.from('partial-cancel'),
+        'customer-1',
+        'ref-1',
+        'web',
+        [line],
+        'ACTIVE',
+        new Date('2026-01-15'),
+        new Date('2026-01-15'),
+        Money.fromCents(1000),
+        Money.fromCents(2000),
+        'partial',
+        null,
+      );
+
+      saleRepo.sales.set('partial-cancel', sale);
+      const lotB = makeTestLot('lot-b', 'v1', 20, 17, 300);
+      lotRepo.lots.set('lot-b', lotB);
+
+      const result = await useCase.execute({ saleId: 'partial-cancel' }, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBeInstanceOf(SalePaymentError);
+      expect(result.error.message).toContain('pagada');
+    });
+
+    it('allows cancelling a fully paid sale (unchanged behavior)', async () => {
+      const { sale, lotA, lotB } = createPopulatedSale('paid-cancel');
+      saleRepo.sales.set('paid-cancel', sale);
+      lotRepo.lots.set('lot-a', lotA);
+      lotRepo.lots.set('lot-b', lotB);
+
+      const result = await useCase.execute({ saleId: 'paid-cancel' }, createUow());
+
+      // A fully-paid sale can still be cancelled (payment guard only blocks unpaid/partial)
+      expect(result.ok).toBe(true);
+      expect(saleRepo.sales.get('paid-cancel')?.status).toBe('CANCELLED');
+    });
+  });
+
   describe('transactional integrity', () => {
     it('rolls back on failure, leaving sale and lots unchanged', async () => {
       // Create a sale but don't add the referenced lots → will fail restoration
@@ -622,6 +701,84 @@ describe('ReturnFullSaleUseCase', () => {
 
       expect(returnEntries).toHaveLength(1);
       expect(returnEntries[0]!.amount.cents).toBe(-8000);
+    });
+  });
+
+  describe('payment guard — unpaid sales cannot be returned', () => {
+    it('rejects returning a sale with paymentStatus pending', async () => {
+      const c = makeConsumption('c1', 'lot-a', 5, 200);
+      const line = new SaleLine(
+        SaleLineId.from('line-1'), 'v1', 5, Money.fromCents(1000), 'regular', [c],
+      );
+      const sale = new SaleEntity(
+        SaleIdEntity.from('pending-return'),
+        'customer-1',
+        'ref-1',
+        'web',
+        [line],
+        'ACTIVE',
+        new Date('2026-01-15'),
+        new Date('2026-01-15'),
+        Money.ZERO,
+        Money.fromCents(5000),
+        'pending',
+        null,
+      );
+
+      saleRepo.sales.set('pending-return', sale);
+      const lotA = makeTestLot('lot-a', 'v1', 20, 15, 200);
+      lotRepo.lots.set('lot-a', lotA);
+
+      const result = await useCase.execute({ saleId: 'pending-return' }, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBeInstanceOf(SalePaymentError);
+      expect(result.error.message).toContain('pagada');
+    });
+
+    it('rejects returning a sale with paymentStatus partial', async () => {
+      const c = makeConsumption('c1', 'lot-b', 3, 300);
+      const line = new SaleLine(
+        SaleLineId.from('line-1'), 'v1', 3, Money.fromCents(1000), 'regular', [c],
+      );
+      const sale = new SaleEntity(
+        SaleIdEntity.from('partial-return'),
+        'customer-1',
+        'ref-1',
+        'web',
+        [line],
+        'ACTIVE',
+        new Date('2026-01-15'),
+        new Date('2026-01-15'),
+        Money.fromCents(1000),
+        Money.fromCents(2000),
+        'partial',
+        null,
+      );
+
+      saleRepo.sales.set('partial-return', sale);
+      const lotB = makeTestLot('lot-b', 'v1', 20, 17, 300);
+      lotRepo.lots.set('lot-b', lotB);
+
+      const result = await useCase.execute({ saleId: 'partial-return' }, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBeInstanceOf(SalePaymentError);
+      expect(result.error.message).toContain('pagada');
+    });
+
+    it('allows returning a fully paid sale (unchanged behavior)', async () => {
+      const { sale, lotA, lotB } = createPopulatedSale('paid-return');
+      saleRepo.sales.set('paid-return', sale);
+      lotRepo.lots.set('lot-a', lotA);
+      lotRepo.lots.set('lot-b', lotB);
+
+      const result = await useCase.execute({ saleId: 'paid-return' }, createUow());
+
+      expect(result.ok).toBe(true);
+      expect(saleRepo.sales.get('paid-return')?.status).toBe('RETURNED');
     });
   });
 

@@ -31,7 +31,7 @@ import type { InventoryLotRepository } from '../../../inventory/domain/Inventory
 import type { CashLedgerRepository } from '../../../accounting-reports/domain/CashLedgerRepository.js';
 import type { CashBoxRepository } from '../../../accounting-reports/domain/CashBoxRepository.js';
 import { toLimaBusinessDate } from '../../../accounting-reports/domain/LimaBusinessDate.js';
-import { SaleStatusError } from '../../domain/Sale.js';
+import { SaleStatusError, SalePaymentError } from '../../domain/Sale.js';
 import { SaleId } from '../../domain/SaleId.js';
 import { PurchaseLotId } from '../../../inventory/domain/PurchaseLotId.js';
 import { CashLedgerEntry } from '../../../accounting-reports/domain/CashLedgerEntry.js';
@@ -96,6 +96,15 @@ export class ReturnFullSaleUseCase {
       }
       if (sale.status === 'CANCELLED') {
         return err(new SaleStatusError('Cannot return a cancelled sale'));
+      }
+
+      // 2b. Validate payment is fully paid (cannot return unpaid/partial sales)
+      if (sale.paymentStatus !== 'paid') {
+        return err(
+          new SalePaymentError(
+            'No se puede devolver una venta que no está completamente pagada',
+          ),
+        );
       }
 
       // 3. Collect all unique purchase lot IDs from consumption records

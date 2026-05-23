@@ -77,7 +77,7 @@ describe('GetCashBoxMovementsUseCase', () => {
 
   function makeEntry(
     id: string,
-    type: 'SALE_INCOME' | 'PURCHASE_OUTFLOW' | 'MANUAL_ADJUSTMENT',
+    type: 'SALE_INCOME' | 'SALE_SETTLEMENT_INCOME' | 'PURCHASE_OUTFLOW' | 'MANUAL_ADJUSTMENT',
     amountCents: number,
     cashBoxId: string,
     sourceId = 'source-1',
@@ -657,6 +657,35 @@ describe('GetCashBoxMovementsUseCase', () => {
         expect(mockSaleRepo.findByIds).toHaveBeenCalledTimes(1);
         // findById (singular) should NOT be called
         expect(mockSaleRepo.findById).not.toHaveBeenCalled();
+      });
+
+      it('keeps profitCents null for SALE_SETTLEMENT_INCOME to avoid profit duplication', async () => {
+        const saleId = 'sale-settled';
+        const box = createBox('box-profit-settled');
+        mockFindById.mockResolvedValue(box);
+        mockFindByCashBoxId.mockResolvedValue([
+          makeEntry('e1', 'SALE_SETTLEMENT_INCOME', 5000, 'box-profit-settled', saleId),
+        ]);
+
+        const line = new SaleLine(
+          SaleLineId.generate(), 'variant-1', 1,
+          Money.fromCents(8000), 'regular', [],
+        );
+        const sale = new Sale(
+          SaleId.from(saleId), 'customer-1', undefined, 'whatsapp',
+          [line], 'ACTIVE', new Date(), new Date(),
+        );
+        mockSaleRepo.findByIds.mockResolvedValue([sale]);
+
+        const result = await useCase.execute({ cashBoxId: 'box-profit-settled' });
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.entries).toHaveLength(1);
+        // SALE_SETTLEMENT_INCOME must NOT duplicate profit already counted in SALE_INCOME
+        expect(result.value.entries[0]!.profitCents).toBeNull();
+        // Sale repo should NOT be called for settlement entries
+        expect(mockSaleRepo.findByIds).not.toHaveBeenCalled();
       });
 
       it('does NOT query profit for off-page sale entries (pagination boundary)', async () => {

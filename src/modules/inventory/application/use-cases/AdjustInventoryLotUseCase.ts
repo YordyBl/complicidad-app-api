@@ -27,7 +27,7 @@ import { VariantId } from '../../domain/VariantId.js';
 import { PurchaseId } from '../../domain/PurchaseId.js';
 import { InventoryLotAdjustment } from '../../domain/InventoryLotAdjustment.js';
 import type { AdjustmentAction, AdjustmentSnapshot } from '../../domain/InventoryLotAdjustment.js';
-import { isLotIntact } from '../../domain/services/LotAdjustmentPolicy.js';
+import { isLotIntact, hasCorrectiveAdjustments } from '../../domain/services/LotAdjustmentPolicy.js';
 
 // ── Module-specific scope ────────────────────────────────────
 
@@ -305,7 +305,10 @@ export class AdjustInventoryLotUseCase {
     // Check intact eligibility
     const hasConsumptions = await scope.inventoryLots.hasConsumptionRecords(lotId);
     const priorAdjustments = await scope.inventoryLotAdjustments.findByLotId(lotId);
-    const intact = isLotIntact(lot, hasConsumptions, priorAdjustments.length > 0);
+    const hasCorrective = hasCorrectiveAdjustments(
+      priorAdjustments.map((a) => ({ action: a.snapshot.action, beforeQuantity: a.snapshot.beforeQuantity })),
+    );
+    const intact = isLotIntact(lot, hasConsumptions, hasCorrective);
 
     if (!intact) {
       return err(new BusinessRuleError(

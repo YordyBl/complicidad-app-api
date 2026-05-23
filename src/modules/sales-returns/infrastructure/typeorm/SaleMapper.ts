@@ -5,8 +5,8 @@
  * bidirectionally.
  */
 import type { BaseMapper } from '../../../../infrastructure/typeorm/mappers/BaseMapper.js';
-import { Sale, SALE_CHANNELS } from '../../domain/Sale.js';
-import type { SaleChannel } from '../../domain/Sale.js';
+import { Sale, SALE_CHANNELS, PAYMENT_STATUSES } from '../../domain/Sale.js';
+import type { SaleChannel, PaymentStatus } from '../../domain/Sale.js';
 import { SaleId } from '../../domain/SaleId.js';
 import { SaleLine, type PriceType } from '../../domain/SaleLine.js';
 import { SaleLineId } from '../../domain/SaleLineId.js';
@@ -44,6 +44,10 @@ export class SaleMapper implements BaseMapper<Sale, SaleEntity> {
       ? (entity.channel as SaleChannel)
       : 'web';
 
+    const paymentStatus = PAYMENT_STATUSES.includes(entity.paymentStatus as PaymentStatus)
+      ? (entity.paymentStatus as PaymentStatus)
+      : 'paid';
+
     return new Sale(
       SaleId.from(entity.id),
       entity.customerId,
@@ -53,6 +57,10 @@ export class SaleMapper implements BaseMapper<Sale, SaleEntity> {
       entity.status as 'ACTIVE' | 'CANCELLED' | 'RETURNED',
       entity.createdAt,
       entity.updatedAt,
+      Money.fromCents(entity.amountPaidCents),
+      Money.fromCents(entity.pendingBalanceCents),
+      paymentStatus,
+      entity.settledAt ?? null,
     );
   }
 
@@ -63,6 +71,12 @@ export class SaleMapper implements BaseMapper<Sale, SaleEntity> {
     entity.channelReference = domain.channelReference ?? null;
     entity.channel = domain.channel;
     entity.status = domain.status;
+
+    // ── Payment state ─────────────────────────────────────────
+    entity.amountPaidCents = domain.amountPaid.cents;
+    entity.pendingBalanceCents = domain.pendingBalance.cents;
+    entity.paymentStatus = domain.paymentStatus;
+    entity.settledAt = domain.settledAt;
 
     entity.lines = domain.lines.map((line) => {
       const lineEntity = new SaleLineEntity();

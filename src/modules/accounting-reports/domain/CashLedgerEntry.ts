@@ -23,6 +23,7 @@ import type { CashBoxId } from './CashBoxId.js';
 
 export const CASH_ENTRY_TYPES = [
   'SALE_INCOME',
+  'SALE_SETTLEMENT_INCOME',
   'PURCHASE_OUTFLOW',
   'RETURN_OUTFLOW',
   'MANUAL_ADJUSTMENT',

@@ -59,7 +59,7 @@ describe('GetCashBoxSummaryUseCase', () => {
 
   function makeEntry(
     id: string,
-    type: 'SALE_INCOME' | 'PURCHASE_OUTFLOW' | 'RETURN_OUTFLOW' | 'MANUAL_ADJUSTMENT' | 'WITHDRAWAL',
+    type: 'SALE_INCOME' | 'SALE_SETTLEMENT_INCOME' | 'PURCHASE_OUTFLOW' | 'RETURN_OUTFLOW' | 'MANUAL_ADJUSTMENT' | 'WITHDRAWAL',
     amountCents: number,
     cashBoxId: string,
   ): CashLedgerEntry {
@@ -171,6 +171,41 @@ describe('GetCashBoxSummaryUseCase', () => {
       if (result.ok) return;
       expect(result.error).toBeInstanceOf(NotFoundError);
       expect(mockFindByCashBoxId).not.toHaveBeenCalled();
+    });
+
+    it('counts SALE_SETTLEMENT_INCOME as gross sales cash', async () => {
+      const box = createBox('box-settlement', 1000, 5000);
+      mockFindById.mockResolvedValue(box);
+      mockFindByCashBoxId.mockResolvedValue([
+        makeEntry('e1', 'SALE_SETTLEMENT_INCOME', 7000, 'box-settlement'),
+      ]);
+
+      const result = await useCase.execute({ cashBoxId: 'box-settlement' });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      // Settlement income counts as sales cash
+      expect(result.value.grossSalesCents).toBe(7000);
+      expect(result.value.currentBalanceCents).toBe(8000); // 1000 opening + 7000
+    });
+
+    it('counts both SALE_INCOME and SALE_SETTLEMENT_INCOME as gross sales', async () => {
+      const box = createBox('box-mixed-sales', 0, 0);
+      mockFindById.mockResolvedValue(box);
+      mockFindByCashBoxId.mockResolvedValue([
+        makeEntry('e1', 'SALE_INCOME', 3000, 'box-mixed-sales'),
+        makeEntry('e2', 'SALE_SETTLEMENT_INCOME', 7000, 'box-mixed-sales'),
+        makeEntry('e3', 'PURCHASE_OUTFLOW', -2000, 'box-mixed-sales'),
+      ]);
+
+      const result = await useCase.execute({ cashBoxId: 'box-mixed-sales' });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      // Both income types count as gross sales (= 10000)
+      expect(result.value.grossSalesCents).toBe(10000);
+      expect(result.value.purchaseOutflowCents).toBe(-2000);
+      expect(result.value.currentBalanceCents).toBe(8000);
     });
 
     it('includes only entries for the requested cash box', async () => {

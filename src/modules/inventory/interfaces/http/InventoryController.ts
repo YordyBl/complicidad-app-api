@@ -9,6 +9,7 @@ import type { Request, Response } from 'express';
 import type { UnitOfWork } from '../../../../shared/application/UnitOfWork.js';
 import type { RegisterPurchaseUseCase, RegisterPurchaseCommand } from '../../application/use-cases/RegisterPurchaseUseCase.js';
 import type { AdjustInventoryLotUseCase, AdjustInventoryLotCommand } from '../../application/use-cases/AdjustInventoryLotUseCase.js';
+import type { ListInventoryLotsUseCase } from '../../application/use-cases/ListInventoryLotsUseCase.js';
 import type { ActorContextResolver } from './ActorContextResolver.js';
 
 export class InventoryController {
@@ -17,6 +18,7 @@ export class InventoryController {
     private readonly uow: UnitOfWork,
     private readonly adjustInventoryLotUseCase?: AdjustInventoryLotUseCase,
     private readonly actorContextResolver?: ActorContextResolver,
+    private readonly listInventoryLotsUseCase?: ListInventoryLotsUseCase,
   ) {}
 
   /**
@@ -78,6 +80,38 @@ export class InventoryController {
     }
 
     res.status(201).json(result.value);
+  }
+
+  // ── GET /inventory/lots ───────────────────────────────────────
+
+  /**
+   * GET /inventory/lots
+   *
+   * List inventory lots with optional productId/variantId filtering.
+   * Returns the canonical lot read model with product context,
+   * variant attributes, stock summary, and per-lot state/action metadata.
+   */
+  async listLots(req: Request, res: Response): Promise<void> {
+    if (!this.listInventoryLotsUseCase) {
+      res.status(503).json({ error: 'ServiceUnavailable', message: 'Listado de lotes no configurado' });
+      return;
+    }
+
+    const productId = typeof req.query.productId === 'string' ? req.query.productId.trim() : undefined;
+    const variantId = typeof req.query.variantId === 'string' ? req.query.variantId.trim() : undefined;
+
+    const result = await this.listInventoryLotsUseCase.execute({
+      ...(productId && productId.length > 0 ? { productId } : {}),
+      ...(variantId && variantId.length > 0 ? { variantId } : {}),
+    });
+
+    if (!result.ok) {
+      const status = result.error.name === 'NotFoundError' ? 404 : 400;
+      res.status(status).json({ error: result.error.name, message: result.error.message });
+      return;
+    }
+
+    res.status(200).json(result.value);
   }
 
   // ── Actor resolution helper ─────────────────────────────────

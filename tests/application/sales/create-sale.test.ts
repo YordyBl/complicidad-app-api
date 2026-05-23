@@ -1047,4 +1047,147 @@ describe('CreateSaleUseCase', () => {
       expect(result.error.message).toContain('Variant');
     });
   });
+
+  // ── Payment at creation ──────────────────────────────────────
+
+  describe('payment at creation', () => {
+    beforeEach(() => {
+      lotRepo.lots.set('lot-v1-pay', createTestLot('lot-v1-pay', 'v1', 10, 500, new Date('2026-01-01')));
+    });
+
+    it('full payment: amountPaidNow equals total revenue → paymentStatus is paid', async () => {
+      const command: CreateSaleCommand = {
+        customerId: 'customer-1',
+        channel: 'web',
+        amountPaidNowCents: 6000, // 3 * 2000
+        items: [{ variantId: 'v1', quantity: 3, priceType: 'regular' }],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const sale = Array.from(saleRepo.sales.values())[0]!;
+      expect(sale.paymentStatus).toBe('paid');
+      expect(sale.amountPaid.cents).toBe(6000);
+      expect(sale.pendingBalance.cents).toBe(0);
+
+      // Cash entry equals the collected amount
+      expect(cashRepo.entries).toHaveLength(1);
+      expect(cashRepo.entries[0]!.amount.cents).toBe(6000);
+    });
+
+    it('zero payment: amountPaidNow is 0 → paymentStatus is pending', async () => {
+      const command: CreateSaleCommand = {
+        customerId: 'customer-1',
+        channel: 'web',
+        amountPaidNowCents: 0,
+        items: [{ variantId: 'v1', quantity: 3, priceType: 'regular' }],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const sale = Array.from(saleRepo.sales.values())[0]!;
+      expect(sale.paymentStatus).toBe('pending');
+      expect(sale.amountPaid.cents).toBe(0);
+      expect(sale.pendingBalance.cents).toBe(6000); // 3*2000
+
+      // No cash entry for zero payment
+      expect(cashRepo.entries).toHaveLength(0);
+    });
+
+    it('partial payment: amountPaidNow less than total → paymentStatus is partial', async () => {
+      const command: CreateSaleCommand = {
+        customerId: 'customer-1',
+        channel: 'web',
+        amountPaidNowCents: 2000, // only 1 of 3 items paid
+        items: [{ variantId: 'v1', quantity: 3, priceType: 'regular' }],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const sale = Array.from(saleRepo.sales.values())[0]!;
+      expect(sale.paymentStatus).toBe('partial');
+      expect(sale.amountPaid.cents).toBe(2000);
+      expect(sale.pendingBalance.cents).toBe(4000); // 3*2000 - 2000
+
+      // Cash entry only for collected amount
+      expect(cashRepo.entries).toHaveLength(1);
+      expect(cashRepo.entries[0]!.amount.cents).toBe(2000);
+    });
+
+    it('rejects negative amountPaidNowCents', async () => {
+      const command: CreateSaleCommand = {
+        customerId: 'customer-1',
+        channel: 'web',
+        amountPaidNowCents: -100,
+        items: [{ variantId: 'v1', quantity: 3, priceType: 'regular' }],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.message).toContain('monto pagado');
+    });
+
+    it('rejects amountPaidNowCents exceeding total revenue', async () => {
+      const command: CreateSaleCommand = {
+        customerId: 'customer-1',
+        channel: 'web',
+        amountPaidNowCents: 10000, // only 6000 total
+        items: [{ variantId: 'v1', quantity: 3, priceType: 'regular' }],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.message).toContain('monto pagado');
+    });
+
+    it('rejects non-integer amountPaidNowCents', async () => {
+      const command: CreateSaleCommand = {
+        customerId: 'customer-1',
+        channel: 'web',
+        amountPaidNowCents: 1.5,
+        items: [{ variantId: 'v1', quantity: 3, priceType: 'regular' }],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.message).toContain('entero');
+    });
+
+    it('defaults to paid when amountPaidNowCents is omitted (backward compatibility)', async () => {
+      const command: CreateSaleCommand = {
+        customerId: 'customer-1',
+        channel: 'web',
+        items: [{ variantId: 'v1', quantity: 3, priceType: 'regular' }],
+      };
+
+      const result = await useCase.execute(command, createUow());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      const sale = Array.from(saleRepo.sales.values())[0]!;
+      expect(sale.paymentStatus).toBe('paid');
+      expect(sale.amountPaid.cents).toBe(6000); // defaults to total revenue
+      expect(sale.pendingBalance.cents).toBe(0);
+
+      // Cash entry for full total (backward compatible)
+      expect(cashRepo.entries).toHaveLength(1);
+      expect(cashRepo.entries[0]!.amount.cents).toBe(6000);
+    });
+  });
 });

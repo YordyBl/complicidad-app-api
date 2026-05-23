@@ -259,3 +259,193 @@ describe('Sale domain — return/cancellation restoration', () => {
     });
   });
 });
+
+// ── Payment state tests ──────────────────────────────────────
+
+import { PAYMENT_STATUSES, type PaymentStatus } from '../../../src/modules/sales-returns/domain/Sale.js';
+
+function makeActiveSaleWithPayment(
+  lines: SaleLine[],
+  amountPaidCents: number,
+  pendingBalanceCents: number,
+  paymentStatus: PaymentStatus,
+  settledAt: Date | null = null,
+): Sale {
+  return new Sale(
+    SaleId.generate(),
+    CUSTOMER_ID,
+    CHANNEL_REF,
+    CHANNEL,
+    lines,
+    'ACTIVE',
+    SALE_DATE,
+    SALE_DATE,
+    Money.fromCents(amountPaidCents),
+    Money.fromCents(pendingBalanceCents),
+    paymentStatus,
+    settledAt,
+  );
+}
+
+describe('Sale domain — payment state', () => {
+  describe('payment status catalog', () => {
+    it('defines three payment statuses: pending, partial, paid', () => {
+      expect(PAYMENT_STATUSES).toEqual(['pending', 'partial', 'paid']);
+    });
+  });
+
+  describe('constructor payment invariants', () => {
+    it('accepts a fully paid sale with amountPaid equal to revenue and zero pendingBalance', () => {
+      const line = makeLine('l1', 'v1', 2, 1000, []);
+      const sale = makeActiveSaleWithPayment([line], 2000, 0, 'paid', null);
+      expect(sale.paymentStatus).toBe('paid');
+      expect(sale.amountPaid.cents).toBe(2000);
+      expect(sale.pendingBalance.cents).toBe(0);
+    });
+
+    it('accepts a pending sale with zero amountPaid', () => {
+      const line = makeLine('l1', 'v1', 2, 1000, []);
+      const sale = makeActiveSaleWithPayment([line], 0, 2000, 'pending', null);
+      expect(sale.paymentStatus).toBe('pending');
+      expect(sale.amountPaid.cents).toBe(0);
+      expect(sale.pendingBalance.cents).toBe(2000);
+    });
+
+    it('accepts a partial sale with some amountPaid', () => {
+      const line = makeLine('l1', 'v1', 2, 1000, []);
+      const sale = makeActiveSaleWithPayment([line], 700, 1300, 'partial', null);
+      expect(sale.paymentStatus).toBe('partial');
+      expect(sale.amountPaid.cents).toBe(700);
+      expect(sale.pendingBalance.cents).toBe(1300);
+    });
+
+    it('rejects payment status that is not pending, partial, or paid', () => {
+      const line = makeLine('l1', 'v1', 2, 1000, []);
+      expect(() => {
+        new Sale(
+          SaleId.generate(),
+          CUSTOMER_ID,
+          CHANNEL_REF,
+          CHANNEL,
+          [line],
+          'ACTIVE',
+          SALE_DATE,
+          SALE_DATE,
+          Money.fromCents(0),
+          Money.fromCents(2000),
+          'unpaid' as PaymentStatus,
+          null,
+        );
+      }).toThrow('Estado de pago');
+    });
+
+    it('accepts settledAt as null for unpaid sales', () => {
+      const line = makeLine('l1', 'v1', 2, 1000, []);
+      const sale = makeActiveSaleWithPayment([line], 0, 2000, 'pending', null);
+      expect(sale.settledAt).toBeNull();
+    });
+
+    it('accepts settledAt as a date for paid sales', () => {
+      const settled = new Date('2026-02-01T10:00:00Z');
+      const line = makeLine('l1', 'v1', 2, 1000, []);
+      const sale = makeActiveSaleWithPayment([line], 2000, 0, 'paid', settled);
+      expect(sale.settledAt).toBe(settled);
+    });
+  });
+
+  describe('settlePendingBalance()', () => {
+    it('transitions a pending sale to paid with exact remaining balance', () => {
+      const line = makeLine('l1', 'v1', 2, 1000, []);
+      const sale = makeActiveSaleWithPayment([line], 500, 1500, 'partial', null);
+      const settledAt = new Date('2026-03-01');
+      sale.settlePendingBalance(settledAt);
+      expect(sale.paymentStatus).toBe('paid');
+      expect(sale.pendingBalance.cents).toBe(0);
+      expect(sale.amountPaid.cents).toBe(2000);
+      expect(sale.settledAt).toBe(settledAt);
+    });
+
+    it('transitions a zero-paid pending sale to paid', () => {
+      const line = makeLine('l1', 'v1', 2, 1000, []);
+      const sale = makeActiveSaleWithPayment([line], 0, 2000, 'pending', null);
+      const settledAt = new Date('2026-03-01');
+      sale.settlePendingBalance(settledAt);
+      expect(sale.paymentStatus).toBe('paid');
+      expect(sale.pendingBalance.cents).toBe(0);
+      expect(sale.amountPaid.cents).toBe(2000);
+    });
+
+    it('throws when settling an already paid sale', () => {
+      const line = makeLine('l1', 'v1', 2, 1000, []);
+      const sale = makeActiveSaleWithPayment([line], 2000, 0, 'paid', new Date());
+      const settledAt = new Date('2026-03-01');
+      expect(() => { sale.settlePendingBalance(settledAt); }).toThrow('ya fue saldada');
+    });
+
+    it('throws when settling a sale with zero pending balance that is not "paid"', () => {
+      // Edge case: should never happen in practice, but guard against it
+      const line = makeLine('l1', 'v1', 2, 1000, []);
+      const sale = makeActiveSaleWithPayment([line], 2000, 0, 'pending', null);
+      const settledAt = new Date('2026-03-01');
+      expect(() => { sale.settlePendingBalance(settledAt); }).toThrow('no tiene saldo pendiente');
+    });
+  });
+
+  describe('payment status — totals remain immutable', () => {
+    it('preserves totalRevenue, totalCost, and grossProfit after settlement', () => {
+      const c1 = makeConsumption('c1', 'lot-1', 3, 500);
+      const line = makeLine('l1', 'v1', 3, 2000, [c1]);
+      const sale = makeActiveSaleWithPayment([line], 1000, 5000, 'partial', null);
+
+      const revenueBefore = sale.totalRevenue.cents;
+      const costBefore = sale.totalCost.cents;
+      const profitBefore = sale.grossProfit.cents;
+
+      sale.settlePendingBalance(new Date());
+
+      expect(sale.totalRevenue.cents).toBe(revenueBefore);
+      expect(sale.totalCost.cents).toBe(costBefore);
+      expect(sale.grossProfit.cents).toBe(profitBefore);
+    });
+  });
+
+  describe('cancel/return guard — payment status', () => {
+    it('rejects cancel when paymentStatus is "pending"', () => {
+      const line = makeLine('l1', 'v1', 2, 1000, []);
+      const sale = makeActiveSaleWithPayment([line], 0, 2000, 'pending', null);
+      expect(() => { sale.cancel(); }).toThrow('no está completamente pagada');
+    });
+
+    it('rejects cancel when paymentStatus is "partial"', () => {
+      const line = makeLine('l1', 'v1', 2, 1000, []);
+      const sale = makeActiveSaleWithPayment([line], 500, 1500, 'partial', null);
+      expect(() => { sale.cancel(); }).toThrow('no está completamente pagada');
+    });
+
+    it('allows cancel when paymentStatus is "paid"', () => {
+      const line = makeLine('l1', 'v1', 2, 1000, []);
+      const sale = makeActiveSaleWithPayment([line], 2000, 0, 'paid', new Date());
+      sale.cancel();
+      expect(sale.status).toBe('CANCELLED');
+    });
+
+    it('rejects return when paymentStatus is "pending"', () => {
+      const line = makeLine('l1', 'v1', 2, 1000, []);
+      const sale = makeActiveSaleWithPayment([line], 0, 2000, 'pending', null);
+      expect(() => { sale.markReturned(); }).toThrow('no está completamente pagada');
+    });
+
+    it('rejects return when paymentStatus is "partial"', () => {
+      const line = makeLine('l1', 'v1', 2, 1000, []);
+      const sale = makeActiveSaleWithPayment([line], 500, 1500, 'partial', null);
+      expect(() => { sale.markReturned(); }).toThrow('no está completamente pagada');
+    });
+
+    it('allows return when paymentStatus is "paid"', () => {
+      const line = makeLine('l1', 'v1', 2, 1000, []);
+      const sale = makeActiveSaleWithPayment([line], 2000, 0, 'paid', new Date());
+      sale.markReturned();
+      expect(sale.status).toBe('RETURNED');
+    });
+  });
+});

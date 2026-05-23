@@ -60,19 +60,51 @@
  *         in: query
  *         schema:
  *           type: integer
+ *           minimum: 1
+ *           default: 1
  *       - name: pageSize
  *         in: query
  *         schema:
  *           type: integer
+ *           minimum: 1
+ *           default: 20
+ *       - name: search
+ *         in: query
+ *         schema:
+ *           type: string
+ *         description: Free-text search on customer name
  *       - name: status
  *         in: query
  *         schema:
  *           type: string
  *           enum: [ACTIVE, CANCELLED, RETURNED]
- *       - name: customerId
+ *       - name: paymentStatus
  *         in: query
  *         schema:
  *           type: string
+ *           enum: [pending, partial, paid]
+ *       - name: dateFrom
+ *         in: query
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - name: dateTo
+ *         in: query
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - name: sortBy
+ *         in: query
+ *         schema:
+ *           type: string
+ *           enum: [createdAt, totalRevenueCents, totalCostCents, grossProfitCents]
+ *           default: createdAt
+ *       - name: sortOrder
+ *         in: query
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
  *       - name: channel
  *         in: query
  *         schema:
@@ -174,6 +206,11 @@ export function createSaleRouter(controller: SaleController): Router {
   // ── Full return ────────────────────────────────────────────
   router.post('/sales/:id/return', (req, res, next) => {
     void controller.returnSale(req, res).catch(next);
+  });
+
+  // ── Settlement ─────────────────────────────────────────────
+  router.post('/sales/:id/settle-balance', (req, res, next) => {
+    void controller.settleBalance(req, res).catch(next);
   });
 
   return router;

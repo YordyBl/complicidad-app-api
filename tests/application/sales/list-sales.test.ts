@@ -18,6 +18,12 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import type { SaleRepository, SaleFilters } from '../../../src/modules/sales-returns/domain/SaleRepository.js';
 import type { SaleId } from '../../../src/modules/sales-returns/domain/SaleId.js';
 import type { SaleListItemReadRepository, SaleListItem } from '../../../src/modules/sales-returns/application/ports/SaleListItemReadRepository.js';
+import type {
+  SaleListReadRepository,
+  SaleListQuery,
+  SaleListRow,
+  SaleListPage,
+} from '../../../src/modules/sales-returns/application/ports/SaleListReadRepository.js';
 import { Money } from '../../../src/shared/domain/Money.js';
 import { Sale as SaleEntity } from '../../../src/modules/sales-returns/domain/Sale.js';
 import { SaleId as SaleIdEntity } from '../../../src/modules/sales-returns/domain/SaleId.js';
@@ -602,6 +608,271 @@ describe('ListSalesUseCase', () => {
         expect(typeof item.displayLabel).toBe('string');
         expect(item.displayLabel.length).toBeGreaterThan(0);
       }
+    });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// Phase 4 — Paginated SaleListReadRepository path
+// ═══════════════════════════════════════════════════════════
+
+class FakeSaleListReadRepository implements SaleListReadRepository {
+  rows: SaleListRow[] = [];
+
+  async query(query: SaleListQuery): Promise<SaleListPage> {
+    let filtered = [...this.rows];
+
+    // Filter by status
+    if (query.status) {
+      filtered = filtered.filter((r) => r.status === query.status);
+    }
+    // Filter by paymentStatus
+    if (query.paymentStatus) {
+      filtered = filtered.filter((r) => r.paymentStatus === query.paymentStatus);
+    }
+    // Search by customer name
+    if (query.search) {
+      const term = query.search.toLowerCase();
+      filtered = filtered.filter((r) => r.customerName.toLowerCase().includes(term));
+    }
+    // Date from
+    if (query.dateFrom) {
+      const from = new Date(query.dateFrom);
+      filtered = filtered.filter((r) => new Date(r.createdAt) >= from);
+    }
+    // Date to (end of day)
+    if (query.dateTo) {
+      const toRaw = new Date(query.dateTo);
+      const to = new Date(toRaw.getFullYear(), toRaw.getMonth(), toRaw.getDate(), 23, 59, 59, 999);
+      filtered = filtered.filter((r) => new Date(r.createdAt) <= to);
+    }
+
+    // Sort
+    const sortBy = query.sortBy ?? 'createdAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+    filtered.sort((a, b) => {
+      let valA: number;
+      let valB: number;
+      switch (sortBy) {
+        case 'totalRevenueCents': valA = a.totalRevenueCents; valB = b.totalRevenueCents; break;
+        case 'totalCostCents': valA = a.totalCostCents; valB = b.totalCostCents; break;
+        case 'grossProfitCents': valA = a.grossProfitCents; valB = b.grossProfitCents; break;
+        default: valA = new Date(a.createdAt).getTime(); valB = new Date(b.createdAt).getTime(); break;
+      }
+      return sortOrder === 'asc' ? valA - valB : valB - valA;
+    });
+
+    // Pagination
+    const total = filtered.length;
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const totalPages = total > 0 ? Math.ceil(total / pageSize) : 1;
+    const startIndex = (page - 1) * pageSize;
+    const items = filtered.slice(startIndex, startIndex + pageSize);
+
+    return { items, total, page, pageSize, totalPages };
+  }
+}
+
+function makeSaleListRow(overrides: Partial<SaleListRow> = {}): SaleListRow {
+  return {
+    saleId: 'row-1',
+    customerId: 'cust-a',
+    customerName: 'Cliente A',
+    channelReference: 'ref-1',
+    channel: 'web',
+    status: 'ACTIVE',
+    paymentStatus: 'paid',
+    amountPaidCents: 3000,
+    pendingBalanceCents: 0,
+    totalRevenueCents: 3000,
+    totalCostCents: 2000,
+    grossProfitCents: 1000,
+    lineCount: 1,
+    settledAt: null,
+    canSettleBalance: false,
+    createdAt: '2026-05-15T10:00:00.000Z',
+    updatedAt: '2026-05-15T10:00:00.000Z',
+    ...overrides,
+  };
+}
+
+describe('ListSalesUseCase — paginated read model', () => {
+  let repo: FakeSaleRepository;
+  let itemRepo: FakeSaleListItemReadRepository;
+  let listRepo: FakeSaleListReadRepository;
+  let useCase: any;
+
+  beforeEach(async () => {
+    repo = new FakeSaleRepository();
+    itemRepo = new FakeSaleListItemReadRepository();
+    listRepo = new FakeSaleListReadRepository();
+
+    // Seed list repo rows
+    listRepo.rows = [
+      makeSaleListRow({ saleId: 's1', customerName: 'Cliente A', grossProfitCents: 1000, totalRevenueCents: 3000, createdAt: '2026-01-15T10:00:00.000Z', paymentStatus: 'paid', amountPaidCents: 3000, pendingBalanceCents: 0, canSettleBalance: false }),
+      makeSaleListRow({ saleId: 's2', customerName: 'Cliente B', grossProfitCents: 500, totalRevenueCents: 2000, createdAt: '2026-02-10T10:00:00.000Z', paymentStatus: 'paid', amountPaidCents: 2000, pendingBalanceCents: 0 }),
+      makeSaleListRow({ saleId: 's3', customerName: 'Cliente C', grossProfitCents: 1500, totalRevenueCents: 3000, createdAt: '2026-03-05T10:00:00.000Z', paymentStatus: 'partial', amountPaidCents: 1000, pendingBalanceCents: 2000, canSettleBalance: true }),
+      makeSaleListRow({ saleId: 's4', customerName: 'Cliente D', grossProfitCents: 2000, totalRevenueCents: 5000, createdAt: '2026-03-10T10:00:00.000Z', paymentStatus: 'pending', amountPaidCents: 0, pendingBalanceCents: 5000, canSettleBalance: true }),
+      makeSaleListRow({ saleId: 's5', customerName: 'Z-Cliente', grossProfitCents: 800, totalRevenueCents: 4000, createdAt: '2026-04-01T10:00:00.000Z', paymentStatus: 'paid', amountPaidCents: 4000, pendingBalanceCents: 0 }),
+    ];
+
+    // Seed matching items
+    for (const row of listRepo.rows) {
+      itemRepo.items.set(row.saleId, [{
+        lineId: `line-${row.saleId}`, saleId: row.saleId, variantId: 'v1',
+        productName: 'Producto', sku: 'SKU-001',
+        displayLabel: 'Producto',
+        attributes: {}, quantity: 1, unitPriceCents: row.totalRevenueCents, priceType: 'regular',
+      }]);
+    }
+
+    const mod = await import('../../../src/modules/sales-returns/application/use-cases/ListSalesUseCase.js');
+    useCase = new mod.ListSalesUseCase(repo, itemRepo, listRepo);
+  });
+
+  describe('executePaginated', () => {
+    it('returns paginated response with metadata', async () => {
+      const result = await useCase.executePaginated({ page: 1, pageSize: 2 });
+
+      expect(result).toHaveProperty('items');
+      expect(result).toHaveProperty('total');
+      expect(result).toHaveProperty('page');
+      expect(result).toHaveProperty('pageSize');
+      expect(result).toHaveProperty('totalPages');
+
+      expect(result.items).toHaveLength(2);
+      expect(result.total).toBe(5);
+      expect(result.page).toBe(1);
+      expect(result.pageSize).toBe(2);
+      expect(result.totalPages).toBe(3);
+    });
+
+    it('defaults to createdAt DESC ordering', async () => {
+      const result = await useCase.executePaginated({ pageSize: 50 });
+
+      // Newest first: s5 (Apr 1), s4 (Mar 10), s3 (Mar 5), s2 (Feb 10), s1 (Jan 15)
+      expect(result.items[0].saleId).toBe('s5');
+      expect(result.items[1].saleId).toBe('s4');
+      expect(result.items[4].saleId).toBe('s1');
+    });
+
+    it('sorts by grossProfitCents desc', async () => {
+      const result = await useCase.executePaginated({ sortBy: 'grossProfitCents', sortOrder: 'desc', pageSize: 50 });
+
+      // Desc by profit: s4 (2000), s3 (1500), s1 (1000), s5 (800), s2 (500)
+      expect(result.items[0].saleId).toBe('s4');
+      expect(result.items[1].saleId).toBe('s3');
+      expect(result.items[2].saleId).toBe('s1');
+      expect(result.items[3].saleId).toBe('s5');
+      expect(result.items[4].saleId).toBe('s2');
+    });
+
+    it('sorts by totalRevenueCents asc', async () => {
+      // Revenue: s1=3000, s2=2000, s3=3000, s4=5000, s5=4000
+      // Asc: s2 (2000), s1 (3000), s3 (3000), s5 (4000), s4 (5000)
+      const result = await useCase.executePaginated({ sortBy: 'totalRevenueCents', sortOrder: 'asc', pageSize: 50 });
+
+      expect(result.items[0].saleId).toBe('s2');
+      expect(result.items[4].saleId).toBe('s4');
+    });
+
+    it('filters by paymentStatus', async () => {
+      const result = await useCase.executePaginated({ paymentStatus: 'pending', pageSize: 50 });
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].saleId).toBe('s4');
+    });
+
+    it('filters by status', async () => {
+      // None are CANCELLED yet, but we can test with ACTIVE
+      const result = await useCase.executePaginated({ status: 'ACTIVE', pageSize: 50 });
+
+      expect(result.total).toBe(5);
+    });
+
+    it('searches by customer name', async () => {
+      const result = await useCase.executePaginated({ search: 'Cliente C', pageSize: 50 });
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].saleId).toBe('s3');
+    });
+
+    it('searches case-insensitively', async () => {
+      const result = await useCase.executePaginated({ search: 'cliente', pageSize: 50 });
+
+      // Matches all rows that have "cliente" in the name (Z-Cliente also matches)
+      expect(result.total).toBe(5);
+    });
+
+    it('filters by date range', async () => {
+      const result = await useCase.executePaginated({ dateFrom: '2026-02-01', dateTo: '2026-03-31', pageSize: 50 });
+
+      expect(result.items).toHaveLength(3); // s2 (Feb 10), s3 (Mar 5), s4 (Mar 10)
+      expect(result.items.map((i: SaleListRow) => i.saleId)).toEqual(['s4', 's3', 's2']); // Desc by date
+    });
+
+    it('includes customerName in every row', async () => {
+      const result = await useCase.executePaginated({ pageSize: 50 });
+
+      for (const item of result.items) {
+        expect(typeof item.customerName).toBe('string');
+        expect(item.customerName.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('includes payment fields in every row', async () => {
+      const result = await useCase.executePaginated({ pageSize: 50 });
+
+      for (const item of result.items) {
+        expect(item).toHaveProperty('paymentStatus');
+        expect(item).toHaveProperty('amountPaidCents');
+        expect(item).toHaveProperty('pendingBalanceCents');
+        expect(item).toHaveProperty('canSettleBalance');
+        expect(typeof item.paymentStatus).toBe('string');
+        expect(typeof item.amountPaidCents).toBe('number');
+        expect(typeof item.pendingBalanceCents).toBe('number');
+        expect(typeof item.canSettleBalance).toBe('boolean');
+      }
+    });
+
+    it('sets canSettleBalance true for pending/partial, false for paid', async () => {
+      const result = await useCase.executePaginated({ pageSize: 50 });
+
+      const s1 = result.items.find((i: SaleListRow) => i.saleId === 's1');
+      expect(s1.canSettleBalance).toBe(false); // paid
+
+      const s3 = result.items.find((i: SaleListRow) => i.saleId === 's3');
+      expect(s3.canSettleBalance).toBe(true); // partial
+
+      const s4 = result.items.find((i: SaleListRow) => i.saleId === 's4');
+      expect(s4.canSettleBalance).toBe(true); // pending
+    });
+
+    it('includes items array on every row', async () => {
+      const result = await useCase.executePaginated({ pageSize: 50 });
+
+      for (const item of result.items) {
+        expect(Array.isArray(item.items)).toBe(true);
+      }
+    });
+
+    it('returns empty results for no matches', async () => {
+      const result = await useCase.executePaginated({ search: 'nonexistent', pageSize: 50 });
+
+      expect(result.items).toEqual([]);
+      expect(result.total).toBe(0);
+      expect(result.totalPages).toBe(1);
+    });
+
+    it('supports pagination second page', async () => {
+      const result = await useCase.executePaginated({ page: 2, pageSize: 2 });
+
+      // 5 total, pageSize 2: page 1 = s5, s4; page 2 = s3, s2; page 3 = s1
+      expect(result.items).toHaveLength(2);
+      expect(result.items[0].saleId).toBe('s3');
+      expect(result.items[1].saleId).toBe('s2');
+      expect(result.total).toBe(5);
     });
   });
 });

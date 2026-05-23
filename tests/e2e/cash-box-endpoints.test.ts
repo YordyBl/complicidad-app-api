@@ -290,6 +290,22 @@ describe('Cash Box HTTP endpoints', () => {
       const res = await request(app).get('/api/v1/cash-boxes/non-existent-id');
       expect(res.status).toBe(404);
     });
+
+    it('counts SALE_SETTLEMENT_INCOME as gross sales in summary', async () => {
+      infra.cashBoxRepo.boxes.clear();
+      infra.cashLedgerRepo.entries = [];
+      const box = seedTodayBox(infra.cashBoxRepo, 'OPEN');
+      void infra.cashLedgerRepo.append(new CashLedgerEntry(
+        CashLedgerEntryId.generate(), 'SALE_SETTLEMENT_INCOME',
+        Money.fromCents(7000), 'sale-1', null, new Date(),
+        box.id, null,
+      ));
+
+      const res = await request(app).get(`/api/v1/cash-boxes/${box.id.toString()}`);
+      expect(res.status).toBe(200);
+      expect(res.body.grossSalesCents).toBe(7000);
+      expect(res.body.currentBalanceCents).toBe(17000); // 10000 opening + 7000
+    });
   });
 
   describe('POST /api/v1/cash-boxes/current/movements', () => {

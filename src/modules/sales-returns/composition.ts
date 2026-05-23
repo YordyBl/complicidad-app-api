@@ -18,9 +18,11 @@ import { VariantTypeOrmRepository } from '../inventory/infrastructure/typeorm/Va
 import { ProductTypeOrmRepository } from '../inventory/infrastructure/typeorm/ProductTypeOrmRepository.js';
 import { SaleTypeOrmRepository } from './infrastructure/typeorm/SaleTypeOrmRepository.js';
 import { TypeOrmSaleListItemReadRepository } from './infrastructure/typeorm/TypeOrmSaleListItemReadRepository.js';
+import { TypeOrmSaleListReadRepository } from './infrastructure/typeorm/TypeOrmSaleListReadRepository.js';
 import { CreateSaleUseCase } from './application/use-cases/CreateSaleUseCase.js';
 import { CancelSaleUseCase } from './application/use-cases/CancelSaleUseCase.js';
 import { ReturnFullSaleUseCase } from './application/use-cases/ReturnFullSaleUseCase.js';
+import { SettleSaleBalanceUseCase } from './application/use-cases/SettleSaleBalanceUseCase.js';
 import { ListSalesUseCase } from './application/use-cases/ListSalesUseCase.js';
 import { GetSaleDetailUseCase } from './application/use-cases/GetSaleDetailUseCase.js';
 import { SaleController } from './interfaces/http/SaleController.js';
@@ -52,12 +54,14 @@ export function createSalesModule(manager?: EntityManager, uow?: UnitOfWork): Ro
 
   // Infrastructure — read-side
   const saleItemReadRepo = new TypeOrmSaleListItemReadRepository(manager);
+  const saleListReadRepo = new TypeOrmSaleListReadRepository(manager);
 
   // Application use cases
   const createSaleUseCase = new CreateSaleUseCase(customerRepo, variantRepo, productRepo);
   const cancelSaleUseCase = new CancelSaleUseCase();
   const returnFullSaleUseCase = new ReturnFullSaleUseCase();
-  const listSalesUseCase = new ListSalesUseCase(saleRepo, saleItemReadRepo);
+  const settleSaleBalanceUseCase = new SettleSaleBalanceUseCase();
+  const listSalesUseCase = new ListSalesUseCase(saleRepo, saleItemReadRepo, saleListReadRepo);
   const getSaleDetailUseCase = new GetSaleDetailUseCase(saleRepo);
 
   // HTTP controller
@@ -65,6 +69,7 @@ export function createSalesModule(manager?: EntityManager, uow?: UnitOfWork): Ro
     createSaleUseCase,
     cancelSaleUseCase,
     returnFullSaleUseCase,
+    settleSaleBalanceUseCase,
     uow,
     listSalesUseCase,
     getSaleDetailUseCase,

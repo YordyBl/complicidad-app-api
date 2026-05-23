@@ -10,10 +10,12 @@ import type { UnitOfWork } from '../../shared/application/UnitOfWork.js';
 import { ProductTypeOrmRepository } from './infrastructure/typeorm/ProductTypeOrmRepository.js';
 import { VariantTypeOrmRepository } from './infrastructure/typeorm/VariantTypeOrmRepository.js';
 import { InventoryLotTypeOrmRepository } from './infrastructure/typeorm/InventoryLotTypeOrmRepository.js';
+import { InventoryLotReadTypeOrmRepository } from './infrastructure/typeorm/InventoryLotReadTypeOrmRepository.js';
 import { CreateProductUseCase } from './application/use-cases/CreateProductUseCase.js';
 import { SearchItemUseCase } from './application/use-cases/SearchItemUseCase.js';
 import { RegisterPurchaseUseCase } from './application/use-cases/RegisterPurchaseUseCase.js';
 import { AdjustInventoryLotUseCase } from './application/use-cases/AdjustInventoryLotUseCase.js';
+import { ListInventoryLotsUseCase } from './application/use-cases/ListInventoryLotsUseCase.js';
 import { ListProductsUseCase } from './application/use-cases/ListProductsUseCase.js';
 import { GetProductByIdUseCase } from './application/use-cases/GetProductByIdUseCase.js';
 import { ProductController } from './interfaces/http/ProductController.js';
@@ -49,6 +51,9 @@ export function createInventoryModule(manager?: EntityManager, uow?: UnitOfWork)
   const searchItemUseCase = new SearchItemUseCase(variantRepo, productRepo, lotRepo);
   const registerPurchaseUseCase = new RegisterPurchaseUseCase(variantRepo);
   const adjustInventoryLotUseCase = new AdjustInventoryLotUseCase(variantRepo);
+  const listInventoryLotsUseCase = new ListInventoryLotsUseCase(
+    new InventoryLotReadTypeOrmRepository(manager),
+  );
   const listProductsUseCase = new ListProductsUseCase(productRepo);
   const getProductByIdUseCase = new GetProductByIdUseCase(productRepo);
 
@@ -57,7 +62,7 @@ export function createInventoryModule(manager?: EntityManager, uow?: UnitOfWork)
 
   // HTTP controllers
   const productController = new ProductController(createProductUseCase, searchItemUseCase, listProductsUseCase, getProductByIdUseCase);
-  const inventoryController = new InventoryController(registerPurchaseUseCase, uow, adjustInventoryLotUseCase, actorResolver);
+  const inventoryController = new InventoryController(registerPurchaseUseCase, uow, adjustInventoryLotUseCase, actorResolver, listInventoryLotsUseCase);
 
   return createInventoryRouter(productController, inventoryController);
 }

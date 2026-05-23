@@ -59,6 +59,7 @@ import { SaleId as SaleIdEntity } from '../../src/modules/sales-returns/domain/S
 import { CreateSaleUseCase } from '../../src/modules/sales-returns/application/use-cases/CreateSaleUseCase.js';
 import { CancelSaleUseCase } from '../../src/modules/sales-returns/application/use-cases/CancelSaleUseCase.js';
 import { ReturnFullSaleUseCase } from '../../src/modules/sales-returns/application/use-cases/ReturnFullSaleUseCase.js';
+import { SettleSaleBalanceUseCase } from '../../src/modules/sales-returns/application/use-cases/SettleSaleBalanceUseCase.js';
 import { SaleController } from '../../src/modules/sales-returns/interfaces/http/SaleController.js';
 import { createSaleRouter } from '../../src/modules/sales-returns/interfaces/http/sale-routes.js';
 import { CreateProductUseCase } from '../../src/modules/inventory/application/use-cases/CreateProductUseCase.js';
@@ -436,6 +437,7 @@ function createTestApp(): TestInfra {
     new CreateSaleUseCase(customerRepo, variantRepo, productRepo),
     new CancelSaleUseCase(),
     new ReturnFullSaleUseCase(),
+    new SettleSaleBalanceUseCase(),
     uow,
   ));
 

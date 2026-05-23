@@ -60,6 +60,7 @@ export class GetCashBoxSummaryUseCase {
       const amount = entry.amount.cents;
       switch (entry.type) {
         case 'SALE_INCOME':
+        case 'SALE_SETTLEMENT_INCOME':
           grossSalesCents += amount;
           break;
         case 'PURCHASE_OUTFLOW':

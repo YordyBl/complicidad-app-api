@@ -202,6 +202,11 @@ export function createInventoryRouter(
   });
 
   // ── Lot adjustment endpoints ───────────────────────────────
+  // List inventory lots (canonical read model for frontend lots view)
+  router.get('/inventory/lots', (req, res, next) => {
+    void inventoryController.listLots(req, res).catch(next);
+  });
+
   // Increase: create new lot with stock
   router.post('/inventory/lots/adjustments/increase', (req, res, next) => {
     void inventoryController.adjustIncrease(req, res).catch(next);

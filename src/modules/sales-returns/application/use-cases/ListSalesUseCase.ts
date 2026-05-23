@@ -1,13 +1,15 @@
 /**
  * List Sales use case — retrieves sales with optional filters.
  *
- * Returns SaleWithItems DTOs that extend SaleSummary with sold-garment
- * display rows for inline APP rendering. Follows ListCustomersUseCase
- * pattern: plain array return (no Result wrapper), empty list = valid response.
+ * Two listing paths:
+ * 1. Legacy: `execute(filters?)` uses SaleRepository aggregate loading
+ *    and returns a plain array. Kept for backward compatibility.
+ * 2. Paginated: `executePaginated(query)` uses SaleListReadRepository
+ *    for SQL-level search, sort, pagination, and customer-name resolution.
+ *    Returns a SaleListPage with metadata.
  *
- * Batch-loads item detail rows via SaleListItemReadRepository to avoid
- * N+1 queries and groups them by saleId so the response never duplicates
- * sale rows.
+ * Both paths batch-load item display rows via SaleListItemReadRepository
+ * and group them by saleId so the response never duplicates sale rows.
  */
 import type { SaleRepository, SaleFilters } from '../../domain/SaleRepository.js';
 import type { Sale } from '../../domain/Sale.js';
@@ -15,6 +17,11 @@ import type {
   SaleListItemReadRepository,
   SaleListItem,
 } from '../ports/SaleListItemReadRepository.js';
+import type {
+  SaleListReadRepository,
+  SaleListQuery,
+  SaleListPage,
+} from '../ports/SaleListReadRepository.js';
 
 // ── DTOs ─────────────────────────────────────────────────────
 
@@ -45,7 +52,10 @@ export class ListSalesUseCase {
   constructor(
     private readonly saleRepository: SaleRepository,
     private readonly itemReadRepository?: SaleListItemReadRepository,
+    private readonly saleListReadRepository?: SaleListReadRepository,
   ) {}
+
+  // ── Legacy path ─────────────────────────────────────────
 
   async execute(filters?: SaleFilters): Promise<SaleWithItems[]> {
     // Validate date filters — silently ignore invalid dates
@@ -76,6 +86,81 @@ export class ListSalesUseCase {
       ...this.toSummary(sale),
       items: itemsBySale.get(sale.id.toString()) ?? [],
     }));
+  }
+
+  // ── Paginated path (read-model backed) ──────────────────
+
+  /**
+   * Execute a paginated, sorted, and filterable sale listing
+   * backed by the SaleListReadRepository.
+   *
+   * Falls back to the legacy aggregate path when no
+   * SaleListReadRepository is wired.
+   */
+  async executePaginated(query: SaleListQuery = {}): Promise<SaleListPage<SaleWithItems>> {
+    if (!this.saleListReadRepository) {
+      // Backward compat: no read repo wired → use legacy aggregate path
+      // and wrap result in a single-page response.
+      const legacyFilters: SaleFilters = {};
+      if (query.sortOrder) legacyFilters.sortOrder = query.sortOrder;
+      if (query.status) legacyFilters.status = query.status;
+      if (query.dateFrom) legacyFilters.dateFrom = query.dateFrom;
+      if (query.dateTo) legacyFilters.dateTo = query.dateTo;
+      const items = await this.execute(
+        Object.keys(legacyFilters).length > 0 ? legacyFilters : undefined,
+      );
+      return {
+        items,
+        total: items.length,
+        page: 1,
+        pageSize: items.length,
+        totalPages: 1,
+      };
+    }
+
+    const page = await this.saleListReadRepository.query(query);
+
+    // Batch-load item display rows for the returned page only
+    const itemsBySale = new Map<string, SaleListItem[]>();
+    if (this.itemReadRepository && page.items.length > 0) {
+      const saleIds = page.items.map((row) => row.saleId);
+      const allItems = await this.itemReadRepository.findBySaleIds(saleIds);
+      for (const item of allItems) {
+        const group = itemsBySale.get(item.saleId);
+        if (group) {
+          group.push(item);
+        } else {
+          itemsBySale.set(item.saleId, [item]);
+        }
+      }
+    }
+
+    return {
+      items: page.items.map((row) => ({
+        saleId: row.saleId,
+        customerId: row.customerId,
+        customerName: row.customerName,
+        channelReference: row.channelReference,
+        channel: row.channel,
+        status: row.status,
+        paymentStatus: row.paymentStatus,
+        amountPaidCents: row.amountPaidCents,
+        pendingBalanceCents: row.pendingBalanceCents,
+        totalRevenueCents: row.totalRevenueCents,
+        totalCostCents: row.totalCostCents,
+        grossProfitCents: row.grossProfitCents,
+        lineCount: row.lineCount,
+        settledAt: row.settledAt,
+        canSettleBalance: row.canSettleBalance,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        items: itemsBySale.get(row.saleId) ?? [],
+      })),
+      total: page.total,
+      page: page.page,
+      pageSize: page.pageSize,
+      totalPages: page.totalPages,
+    };
   }
 
   private validateFilters(filters?: SaleFilters): SaleFilters | undefined {

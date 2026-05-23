@@ -48,6 +48,11 @@ export interface SaleDetailResponse {
   createdAt: string;
   updatedAt: string;
   lines: SaleDetailLine[];
+  // Payment snapshot fields — available when the sale was created with upfront payment
+  paymentStatus: 'pending' | 'partial' | 'paid';
+  amountPaidCents: number;
+  pendingBalanceCents: number;
+  settledAt: string | null;
 }
 
 // ── Use Case ─────────────────────────────────────────────────
@@ -94,6 +99,11 @@ export class GetSaleDetailUseCase {
           subtotalCents: c.subtotal.cents,
         })),
       })),
+      // Payment snapshot
+      paymentStatus: sale.paymentStatus,
+      amountPaidCents: sale.amountPaid.cents,
+      pendingBalanceCents: sale.pendingBalance.cents,
+      settledAt: sale.settledAt ? sale.settledAt.toISOString() : null,
     };
   }
 }

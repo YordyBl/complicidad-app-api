@@ -604,6 +604,52 @@ describe('AdjustInventoryLotUseCase', () => {
       expect(result.error.message).toContain('histórico');
     });
 
+    it('allows intact edit on lot with only creation INCREASE adjustment (beforeQuantity=0)', async () => {
+      const lot = createLot(variantA.id, { purchased: 100, remaining: 100, unitCost: 1500 });
+      lotRepo.lots.set(lot.id.toString(), lot);
+
+      // Add only a creation INCREASE adjustment (beforeQuantity=0) — the initial audit record
+      const { InventoryLotAdjustment } = await import(
+        '../../../src/modules/inventory/domain/InventoryLotAdjustment.js'
+      );
+      const creationAdj = InventoryLotAdjustment.create({
+        variantId: variantA.id.toString(),
+        lotId: lot.id.toString(),
+        action: 'INCREASE',
+        beforeQuantity: 0,
+        afterQuantity: 100,
+        beforeUnitCostCents: 0,
+        afterUnitCostCents: 1500,
+        deltaQuantity: 100,
+        reason: 'Creación inicial del lote',
+        actorId: 'user-001',
+        actorSource: 'web',
+        requestedAt: new Date(),
+        effectiveAt: new Date(),
+        correlationId: null,
+      });
+      adjustmentRepo.adjustments.push(creationAdj);
+
+      const cmd = intactEditCmd(lot.id.toString(), variantA.id.toString(), {
+        quantity: 80,
+        unitCost: 12.00,
+      });
+
+      const result = await useCase.execute(cmd, createUow());
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // Lot updated in place
+      const updated = lotRepo.lots.get(lot.id.toString())!;
+      expect(updated.purchasedQuantity).toBe(80);
+      expect(updated.remainingQuantity).toBe(80);
+      expect(updated.unitCost.cents).toBe(1200);
+
+      // Audit records: 1 creation + 1 intact edit = 2 total
+      expect(adjustmentRepo.adjustments).toHaveLength(2);
+    });
+
     it('rejects edit on partially consumed lot', async () => {
       const lot = createLot(variantA.id, { purchased: 100, remaining: 50, unitCost: 1500 });
       lotRepo.lots.set(lot.id.toString(), lot);

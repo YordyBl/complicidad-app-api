@@ -74,6 +74,9 @@ export interface CreateSaleCommand {
   channel: SaleChannel;
   channelReference?: string;
   items: SaleItemCommand[];
+  /** Optional: how much was paid at registration time (in cents).
+   *  If omitted, defaults to the full sale total (backward-compatible "paid"). */
+  amountPaidNowCents?: number;
 }
 
 export interface CreateSaleResponse {
@@ -175,6 +178,16 @@ export class CreateSaleUseCase {
       }
     }
 
+    // ── Validate amountPaidNowCents if provided ─────────────
+    if (command.amountPaidNowCents !== undefined) {
+      if (!Number.isInteger(command.amountPaidNowCents)) {
+        return err(new InvalidQuantityError('El monto pagado debe ser un número entero (centavos)'));
+      }
+      if (command.amountPaidNowCents < 0) {
+        return err(new BusinessRuleError('El monto pagado no puede ser negativo'));
+      }
+    }
+
     // ── Execute in transaction ────────────────────────────
     return uow.run(async (baseScope) => {
       const scope = baseScope as SaleScope;
@@ -272,8 +285,31 @@ export class CreateSaleUseCase {
         lines.push(line);
       }
 
-      // 3. Create the Sale aggregate
+      // 3. Create the Sale aggregate with payment state
       const saleId = SaleId.generate();
+      const totalRevenue = lines.reduce(
+        (sum, line) => sum + line.totalPrice.cents,
+        0,
+      );
+
+      // Resolve amount paid now and derive payment status
+      const amountPaidNowCents = command.amountPaidNowCents ?? totalRevenue; // backward compatibility: default = fully paid
+
+      // Extra guard: amountPaidNow cannot exceed total revenue (needs totalRevenue first)
+      if (amountPaidNowCents > totalRevenue) {
+        return err(new BusinessRuleError('El monto pagado no puede superar el total de la venta'));
+      }
+
+      const pendingBalanceCents = totalRevenue - amountPaidNowCents;
+      let paymentStatus: 'pending' | 'partial' | 'paid';
+      if (amountPaidNowCents === 0) {
+        paymentStatus = 'pending';
+      } else if (pendingBalanceCents > 0) {
+        paymentStatus = 'partial';
+      } else {
+        paymentStatus = 'paid';
+      }
+
       const sale = new Sale(
         saleId,
         command.customerId,
@@ -284,6 +320,10 @@ export class CreateSaleUseCase {
         'ACTIVE',
         now,
         now,
+        Money.fromCents(amountPaidNowCents),
+        Money.fromCents(pendingBalanceCents),
+        paymentStatus,
+        null,
       );
 
       // 4. Persist sale (cascades to lines and consumptions)
@@ -302,18 +342,20 @@ export class CreateSaleUseCase {
         await scope.inventoryLots.saveMany(modifiedLots);
       }
 
-      // 6. Create cash ledger entry (positive income, scoped to today's caja)
-      const cashEntry = new CashLedgerEntry(
-        CashLedgerEntryId.generate(),
-        'SALE_INCOME',
-        sale.totalRevenue,
-        sale.id.toString(),
-        null,
-        now,
-        todayBox.id,
-        'Prenda vendida',
-      );
-      await scope.cashLedger.append(cashEntry);
+      // 6. Create cash ledger entry ONLY for collected amount (not the full sale total)
+      if (amountPaidNowCents > 0) {
+        const cashEntry = new CashLedgerEntry(
+          CashLedgerEntryId.generate(),
+          'SALE_INCOME',
+          Money.fromCents(amountPaidNowCents),
+          sale.id.toString(),
+          null,
+          now,
+          todayBox.id,
+          'Prenda vendida',
+        );
+        await scope.cashLedger.append(cashEntry);
+      }
 
       return ok({
         saleId: sale.id.toString(),
