@@ -2,6 +2,7 @@
  * TypeORM entity for the `customers` table.
  *
  * Phase 8: Added alias, address, google_maps_url, notes columns.
+ * SDD constancias: Added district column.
  */
 import { Entity, Column } from 'typeorm';
 import { BaseEntity } from '../../../../infrastructure/typeorm/BaseEntity.js';
@@ -28,4 +29,7 @@ export class CustomerEntity extends BaseEntity {
 
   @Column({ type: 'text', nullable: true })
   notes!: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  district!: string | null;
 }

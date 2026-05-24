@@ -12,6 +12,9 @@ import type { ReturnFullSaleUseCase } from '../../application/use-cases/ReturnFu
 import type { SettleSaleBalanceUseCase } from '../../application/use-cases/SettleSaleBalanceUseCase.js';
 import type { ListSalesUseCase } from '../../application/use-cases/ListSalesUseCase.js';
 import type { GetSaleDetailUseCase } from '../../application/use-cases/GetSaleDetailUseCase.js';
+import type { CreateSaleConstanciaEmissionUseCase } from '../../application/use-cases/CreateSaleConstanciaEmissionUseCase.js';
+import type { ListSaleConstanciaEmissionsUseCase } from '../../application/use-cases/ListSaleConstanciaEmissionsUseCase.js';
+import type { GetSaleConstanciaPdfUseCase } from '../../application/use-cases/GetSaleConstanciaPdfUseCase.js';
 import type { SaleFilters } from '../../domain/SaleRepository.js';
 import type { SaleListQuery } from '../../application/ports/SaleListReadRepository.js';
 import { SALE_CHANNELS } from '../../domain/Sale.js';
@@ -36,6 +39,9 @@ export class SaleController {
     private readonly uow: UnitOfWork,
     private readonly listSalesUseCase?: ListSalesUseCase,
     private readonly getSaleDetailUseCase?: GetSaleDetailUseCase,
+    private readonly createConstanciaEmissionUseCase?: CreateSaleConstanciaEmissionUseCase,
+    private readonly listConstanciaEmissionsUseCase?: ListSaleConstanciaEmissionsUseCase,
+    private readonly getConstanciaPdfUseCase?: GetSaleConstanciaPdfUseCase,
   ) {}
 
   /**
@@ -341,5 +347,134 @@ export class SaleController {
     }
 
     res.status(200).json(result.value);
+  }
+
+  /**
+   * POST /sales/:id/constancia-emissions — create a new constancia emission.
+   *
+   * Requires the enriched sale detail in the request body so the backend
+   * can build an immutable snapshot and persist it.
+   */
+  async createConstanciaEmission(req: Request, res: Response): Promise<void> {
+    if (!this.createConstanciaEmissionUseCase) {
+      res.status(503).json({
+        error: 'ServiceUnavailable',
+        message: 'La emisión de constancias no está disponible',
+      });
+      return;
+    }
+
+    const id = req.params.id as string | undefined;
+    if (!id) {
+      res.status(400).json({ error: 'ValidationError', message: 'El ID de venta es obligatorio' });
+      return;
+    }
+
+    if (!UUID_REGEX.test(id)) {
+      res.status(400).json({
+        error: 'ValidationError',
+        message: `Formato de ID de venta inválido: "${id}"`,
+      });
+      return;
+    }
+
+    const { saleData } = req.body as Record<string, unknown>;
+    if (!saleData || typeof saleData !== 'object') {
+      res.status(400).json({
+        error: 'ValidationError',
+        message: 'saleData es obligatorio y debe ser un objeto con los datos enriquecidos de la venta',
+      });
+      return;
+    }
+
+    const result = await this.createConstanciaEmissionUseCase.execute({
+      saleId: id,
+      saleData: saleData as Parameters<typeof this.createConstanciaEmissionUseCase.execute>[0]['saleData'],
+    });
+
+    if (!result.ok) {
+      const status = result.error.name === 'NotFoundError' ? 404 : 400;
+      res.status(status).json({ error: result.error.name, message: result.error.message });
+      return;
+    }
+
+    res.status(201).json(result.value);
+  }
+
+  /**
+   * GET /sales/:id/constancia-emissions — list emission history for a sale.
+   */
+  async listConstanciaEmissions(req: Request, res: Response): Promise<void> {
+    if (!this.listConstanciaEmissionsUseCase) {
+      res.status(503).json({
+        error: 'ServiceUnavailable',
+        message: 'El historial de constancias no está disponible',
+      });
+      return;
+    }
+
+    const id = req.params.id as string | undefined;
+    if (!id) {
+      res.status(400).json({ error: 'ValidationError', message: 'El ID de venta es obligatorio' });
+      return;
+    }
+
+    if (!UUID_REGEX.test(id)) {
+      res.status(400).json({
+        error: 'ValidationError',
+        message: `Formato de ID de venta inválido: "${id}"`,
+      });
+      return;
+    }
+
+    const result = await this.listConstanciaEmissionsUseCase.execute({ saleId: id });
+
+    if (!result.ok) {
+      res.status(400).json({ error: result.error.name, message: result.error.message });
+      return;
+    }
+
+    res.status(200).json(result.value);
+  }
+
+  /**
+   * GET /sales/:id/constancia-emissions/:emissionId/pdf — download a constancia PDF.
+   */
+  async getConstanciaPdf(req: Request, res: Response): Promise<void> {
+    if (!this.getConstanciaPdfUseCase) {
+      res.status(503).json({
+        error: 'ServiceUnavailable',
+        message: 'La descarga de constancias PDF no está disponible',
+      });
+      return;
+    }
+
+    const emissionId = req.params.emissionId as string | undefined;
+    if (!emissionId) {
+      res.status(400).json({ error: 'ValidationError', message: 'El ID de emisión es obligatorio' });
+      return;
+    }
+
+    if (!UUID_REGEX.test(emissionId)) {
+      res.status(400).json({
+        error: 'ValidationError',
+        message: `Formato de ID de emisión inválido: "${emissionId}"`,
+      });
+      return;
+    }
+
+    const result = await this.getConstanciaPdfUseCase.execute({ emissionId });
+
+    if (!result.ok) {
+      const status = result.error.name === 'NotFoundError' ? 404 : 400;
+      res.status(status).json({ error: result.error.name, message: result.error.message });
+      return;
+    }
+
+    const { pdf, metadata } = result.value;
+    res.setHeader('Content-Type', metadata.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${metadata.filename}"`);
+    res.setHeader('Content-Length', pdf.length.toString());
+    res.status(200).send(pdf);
   }
 }

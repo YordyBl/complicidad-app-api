@@ -359,7 +359,7 @@ function createTestProduct(id: string, salePriceCents: number): ProductEntity {
 function createTestCustomer(id: string): Customer {
   return new Customer(
     CustomerId.from(id), 'Test Customer', 'test@example.com', '+1234567890',
-    null, null, null, null,
+    null, null, null, null, null,
     new Date('2026-01-01'), new Date('2026-01-01'),
   );
 }

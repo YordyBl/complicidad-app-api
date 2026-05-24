@@ -61,6 +61,7 @@ describe('CreateCustomerUseCase', () => {
         address: 'Av. Corrientes 1234',
         googleMapsUrl: 'https://maps.google.com/?q=Av.+Corrientes+1234',
         notes: 'Cliente frecuente',
+        district: 'CABA',
       };
 
       const result = await useCase.execute(command);
@@ -76,6 +77,7 @@ describe('CreateCustomerUseCase', () => {
       expect(result.value.address).toBe('Av. Corrientes 1234');
       expect(result.value.googleMapsUrl).toBe('https://maps.google.com/?q=Av.+Corrientes+1234');
       expect(result.value.notes).toBe('Cliente frecuente');
+      expect(result.value.district).toBe('CABA');
 
       // Verify persisted
       const saved = await repo.findById(CustomerId.from(result.value.id));
@@ -92,6 +94,7 @@ describe('CreateCustomerUseCase', () => {
         address: null,
         googleMapsUrl: null,
         notes: null,
+        district: null,
       };
 
       const result = await useCase.execute(command);
@@ -111,6 +114,7 @@ describe('CreateCustomerUseCase', () => {
         name: '',
         email: null, phone: null, alias: null,
         address: null, googleMapsUrl: null, notes: null,
+        district: null,
       };
 
       const result = await useCase.execute(command);
@@ -125,6 +129,7 @@ describe('CreateCustomerUseCase', () => {
         name: '   ',
         email: null, phone: null, alias: null,
         address: null, googleMapsUrl: null, notes: null,
+        district: null,
       };
 
       const result = await useCase.execute(command);
@@ -155,6 +160,7 @@ describe('UpdateCustomerUseCase', () => {
       'Original Address',
       'https://maps.google.com/?q=Original',
       'Original notes',
+      null,
       now,
       now,
     );
@@ -170,6 +176,7 @@ describe('UpdateCustomerUseCase', () => {
         phone: '+5491199999999',
         alias: 'upd',
         address: 'Updated Address',
+        district: 'Palermo',
         googleMapsUrl: 'https://maps.google.com/?q=Updated',
         notes: 'Updated notes',
       };
@@ -198,6 +205,7 @@ describe('UpdateCustomerUseCase', () => {
         phone: null,
         alias: null,
         address: null,
+        district: null,
         googleMapsUrl: null,
         notes: null,
       };
@@ -219,7 +227,7 @@ describe('UpdateCustomerUseCase', () => {
         customerId: 'cust-1',
         name: '',
         email: null, phone: null, alias: null,
-        address: null, googleMapsUrl: null, notes: null,
+        address: null, district: null, googleMapsUrl: null, notes: null,
       };
 
       const result = await useCase.execute(command);
@@ -234,7 +242,7 @@ describe('UpdateCustomerUseCase', () => {
         customerId: 'non-existent',
         name: 'Name',
         email: null, phone: null, alias: null,
-        address: null, googleMapsUrl: null, notes: null,
+        address: null, district: null, googleMapsUrl: null, notes: null,
       };
 
       const result = await useCase.execute(command);
@@ -257,7 +265,7 @@ describe('GetCustomerUseCase', () => {
     const customer = new Customer(
       CustomerId.from('cust-1'),
       'Test User',
-      'test@example.com', null, null, null, null, null,
+      'test@example.com', null, null, null, null, null, null,
       new Date(), new Date(),
     );
     await repo.save(customer);
@@ -287,8 +295,8 @@ describe('ListCustomersUseCase', () => {
     useCase = new ListCustomersUseCase(repo);
 
     const now = new Date();
-    await repo.save(new Customer(CustomerId.from('c-1'), 'Alice', null, null, null, null, null, null, now, now));
-    await repo.save(new Customer(CustomerId.from('c-2'), 'Bob', null, null, null, null, null, null, now, now));
+    await repo.save(new Customer(CustomerId.from('c-1'), 'Alice', null, null, null, null, null, null, null, now, now));
+    await repo.save(new Customer(CustomerId.from('c-2'), 'Bob', null, null, null, null, null, null, null, now, now));
   });
 
   it('returns all customers', async () => {

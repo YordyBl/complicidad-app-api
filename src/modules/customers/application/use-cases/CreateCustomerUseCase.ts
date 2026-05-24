@@ -22,6 +22,7 @@ export interface CreateCustomerCommand {
   address: string | null;
   googleMapsUrl: string | null;
   notes: string | null;
+  district: string | null;
 }
 
 export interface CreateCustomerResponse {
@@ -33,6 +34,7 @@ export interface CreateCustomerResponse {
   address: string | null;
   googleMapsUrl: string | null;
   notes: string | null;
+  district: string | null;
   createdAt: string;
 }
 
@@ -67,6 +69,7 @@ export class CreateCustomerUseCase {
       command.address ?? null,
       command.googleMapsUrl ?? null,
       command.notes ?? null,
+      command.district ?? null,
       now,
       now,
     );
@@ -82,6 +85,7 @@ export class CreateCustomerUseCase {
       address: customer.address,
       googleMapsUrl: customer.googleMapsUrl,
       notes: customer.notes,
+      district: customer.district,
       createdAt: customer.createdAt.toISOString(),
     });
   }

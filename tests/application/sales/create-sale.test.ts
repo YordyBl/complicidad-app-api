@@ -293,7 +293,7 @@ function createTestCustomer(id?: string): Customer {
     'Test Customer',
     'test@example.com',
     '+1234567890',
-    null, null, null, null,
+    null, null, null, null, null,
     new Date('2026-01-01'),
     new Date('2026-01-01'),
   );

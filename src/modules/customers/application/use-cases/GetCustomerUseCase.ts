@@ -22,6 +22,7 @@ export interface GetCustomerResponse {
   address: string | null;
   googleMapsUrl: string | null;
   notes: string | null;
+  district: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -48,6 +49,7 @@ export class GetCustomerUseCase {
       address: customer.address,
       googleMapsUrl: customer.googleMapsUrl,
       notes: customer.notes,
+      district: customer.district,
       createdAt: customer.createdAt.toISOString(),
       updatedAt: customer.updatedAt.toISOString(),
     });

@@ -213,5 +213,18 @@ export function createSaleRouter(controller: SaleController): Router {
     void controller.settleBalance(req, res).catch(next);
   });
 
+  // ── Constancia emissions ───────────────────────────────────
+  router.post('/sales/:id/constancia-emissions', (req, res, next) => {
+    void controller.createConstanciaEmission(req, res).catch(next);
+  });
+
+  router.get('/sales/:id/constancia-emissions', (req, res, next) => {
+    void controller.listConstanciaEmissions(req, res).catch(next);
+  });
+
+  router.get('/sales/:id/constancia-emissions/:emissionId/pdf', (req, res, next) => {
+    void controller.getConstanciaPdf(req, res).catch(next);
+  });
+
   return router;
 }

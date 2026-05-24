@@ -14,6 +14,7 @@ export interface ListCustomerItem {
   address: string | null;
   googleMapsUrl: string | null;
   notes: string | null;
+  district: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -35,6 +36,7 @@ export class ListCustomersUseCase {
       address: c.address,
       googleMapsUrl: c.googleMapsUrl,
       notes: c.notes,
+      district: c.district,
       createdAt: c.createdAt.toISOString(),
       updatedAt: c.updatedAt.toISOString(),
     }));

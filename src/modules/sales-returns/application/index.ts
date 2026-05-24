@@ -32,3 +32,16 @@ export type {
   SaleDetailLine,
   SaleDetailConsumption,
 } from './use-cases/GetSaleDetailUseCase.js';
+
+export { CreateSaleConstanciaEmissionUseCase } from './use-cases/CreateSaleConstanciaEmissionUseCase.js';
+export type {
+  CreateSaleConstanciaEmissionCommand,
+  CreateSaleConstanciaEmissionResponse,
+} from './use-cases/CreateSaleConstanciaEmissionUseCase.js';
+
+export { ListSaleConstanciaEmissionsUseCase } from './use-cases/ListSaleConstanciaEmissionsUseCase.js';
+export type {
+  SaleConstanciaEmissionSummary,
+} from './use-cases/ListSaleConstanciaEmissionsUseCase.js';
+
+export { GetSaleConstanciaPdfUseCase } from './use-cases/GetSaleConstanciaPdfUseCase.js';

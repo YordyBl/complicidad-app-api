@@ -19,12 +19,18 @@ import { ProductTypeOrmRepository } from '../inventory/infrastructure/typeorm/Pr
 import { SaleTypeOrmRepository } from './infrastructure/typeorm/SaleTypeOrmRepository.js';
 import { TypeOrmSaleListItemReadRepository } from './infrastructure/typeorm/TypeOrmSaleListItemReadRepository.js';
 import { TypeOrmSaleListReadRepository } from './infrastructure/typeorm/TypeOrmSaleListReadRepository.js';
+import { TypeOrmSaleDetailReadRepository } from './infrastructure/typeorm/TypeOrmSaleDetailReadRepository.js';
+import { TypeOrmSaleConstanciaEmissionRepository } from './infrastructure/typeorm/TypeOrmSaleConstanciaEmissionRepository.js';
 import { CreateSaleUseCase } from './application/use-cases/CreateSaleUseCase.js';
 import { CancelSaleUseCase } from './application/use-cases/CancelSaleUseCase.js';
 import { ReturnFullSaleUseCase } from './application/use-cases/ReturnFullSaleUseCase.js';
 import { SettleSaleBalanceUseCase } from './application/use-cases/SettleSaleBalanceUseCase.js';
 import { ListSalesUseCase } from './application/use-cases/ListSalesUseCase.js';
 import { GetSaleDetailUseCase } from './application/use-cases/GetSaleDetailUseCase.js';
+import { SaleId } from './domain/SaleId.js';
+import { CreateSaleConstanciaEmissionUseCase } from './application/use-cases/CreateSaleConstanciaEmissionUseCase.js';
+import { ListSaleConstanciaEmissionsUseCase } from './application/use-cases/ListSaleConstanciaEmissionsUseCase.js';
+import { GetSaleConstanciaPdfUseCase } from './application/use-cases/GetSaleConstanciaPdfUseCase.js';
 import { SaleController } from './interfaces/http/SaleController.js';
 import { createSaleRouter } from './interfaces/http/sale-routes.js';
 
@@ -55,6 +61,8 @@ export function createSalesModule(manager?: EntityManager, uow?: UnitOfWork): Ro
   // Infrastructure — read-side
   const saleItemReadRepo = new TypeOrmSaleListItemReadRepository(manager);
   const saleListReadRepo = new TypeOrmSaleListReadRepository(manager);
+  const saleDetailReadRepo = new TypeOrmSaleDetailReadRepository(manager);
+  const constanciaEmissionRepo = new TypeOrmSaleConstanciaEmissionRepository(manager);
 
   // Application use cases
   const createSaleUseCase = new CreateSaleUseCase(customerRepo, variantRepo, productRepo);
@@ -62,7 +70,16 @@ export function createSalesModule(manager?: EntityManager, uow?: UnitOfWork): Ro
   const returnFullSaleUseCase = new ReturnFullSaleUseCase();
   const settleSaleBalanceUseCase = new SettleSaleBalanceUseCase();
   const listSalesUseCase = new ListSalesUseCase(saleRepo, saleItemReadRepo, saleListReadRepo);
-  const getSaleDetailUseCase = new GetSaleDetailUseCase(saleRepo);
+  const getSaleDetailUseCase = new GetSaleDetailUseCase(saleRepo, saleDetailReadRepo);
+  const constanciaEmissionSaleChecker = {
+    findById: (id: string) => saleRepo.findById(SaleId.from(id)),
+  };
+  const createConstanciaEmissionUseCase = new CreateSaleConstanciaEmissionUseCase(
+    constanciaEmissionRepo,
+    constanciaEmissionSaleChecker,
+  );
+  const listConstanciaEmissionsUseCase = new ListSaleConstanciaEmissionsUseCase(constanciaEmissionRepo);
+  const getConstanciaPdfUseCase = new GetSaleConstanciaPdfUseCase(constanciaEmissionRepo);
 
   // HTTP controller
   const controller = new SaleController(
@@ -73,6 +90,9 @@ export function createSalesModule(manager?: EntityManager, uow?: UnitOfWork): Ro
     uow,
     listSalesUseCase,
     getSaleDetailUseCase,
+    createConstanciaEmissionUseCase,
+    listConstanciaEmissionsUseCase,
+    getConstanciaPdfUseCase,
   );
 
   return createSaleRouter(controller);

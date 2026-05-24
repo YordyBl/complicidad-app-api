@@ -22,6 +22,7 @@ export interface UpdateCustomerCommand {
   address: string | null;
   googleMapsUrl: string | null;
   notes: string | null;
+  district: string | null;
 }
 
 export interface UpdateCustomerResponse {
@@ -33,6 +34,7 @@ export interface UpdateCustomerResponse {
   address: string | null;
   googleMapsUrl: string | null;
   notes: string | null;
+  district: string | null;
   updatedAt: string;
 }
 
@@ -64,6 +66,7 @@ export class UpdateCustomerUseCase {
       command.address ?? null,
       command.googleMapsUrl ?? null,
       command.notes ?? null,
+      command.district ?? null,
       now,
     );
 
@@ -78,6 +81,7 @@ export class UpdateCustomerUseCase {
       address: customer.address,
       googleMapsUrl: customer.googleMapsUrl,
       notes: customer.notes,
+      district: customer.district,
       updatedAt: customer.updatedAt.toISOString(),
     });
   }

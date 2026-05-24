@@ -36,6 +36,8 @@
  *                 type: string
  *               notes:
  *                 type: string
+ *               district:
+ *                 type: string
  *     responses:
  *       201:
  *         description: Customer created
@@ -119,6 +121,8 @@
  *               googleMapsUrl:
  *                 type: string
  *               notes:
+ *                 type: string
+ *               district:
  *                 type: string
  *     responses:
  *       200:

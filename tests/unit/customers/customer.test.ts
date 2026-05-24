@@ -20,6 +20,7 @@ describe('Customer', () => {
       'Av. Corrientes 1234, CABA',
       'https://maps.google.com/?q=Av.+Corrientes+1234',
       'Cliente frecuente, compra semanalmente',
+      'CABA',
       now,
       now,
     );
@@ -36,13 +37,14 @@ describe('Customer', () => {
       expect(c.address).toBe('Av. Corrientes 1234, CABA');
       expect(c.googleMapsUrl).toBe('https://maps.google.com/?q=Av.+Corrientes+1234');
       expect(c.notes).toBe('Cliente frecuente, compra semanalmente');
+      expect(c.district).toBe('CABA');
     });
 
-    it('allows null for optional fields (email, phone, alias, address, googleMapsUrl, notes)', () => {
+    it('allows null for optional fields (email, phone, alias, address, googleMapsUrl, notes, district)', () => {
       const c = new Customer(
         CustomerId.from('cust-2'),
         'María López',
-        null, null, null, null, null, null,
+        null, null, null, null, null, null, null,
         now, now,
       );
       expect(c.name).toBe('María López');
@@ -52,13 +54,14 @@ describe('Customer', () => {
       expect(c.address).toBeNull();
       expect(c.googleMapsUrl).toBeNull();
       expect(c.notes).toBeNull();
+      expect(c.district).toBeNull();
     });
 
     it('rejects empty name', () => {
       expect(() => new Customer(
         CustomerId.from('cust-3'),
         '',
-        null, null, null, null, null, null,
+        null, null, null, null, null, null, null,
         now, now,
       )).toThrow('El nombre del cliente es obligatorio');
     });
@@ -67,7 +70,7 @@ describe('Customer', () => {
       expect(() => new Customer(
         CustomerId.from('cust-4'),
         '   ',
-        null, null, null, null, null, null,
+        null, null, null, null, null, null, null,
         now, now,
       )).toThrow('El nombre del cliente es obligatorio');
     });
@@ -86,6 +89,7 @@ describe('Customer', () => {
         'Av. Santa Fe 5678, CABA',
         'https://maps.google.com/?q=Av.+Santa+Fe+5678',
         'Cliente actualizado',
+        'Palermo',
         later,
       );
 
@@ -96,6 +100,7 @@ describe('Customer', () => {
       expect(c.address).toBe('Av. Santa Fe 5678, CABA');
       expect(c.googleMapsUrl).toBe('https://maps.google.com/?q=Av.+Santa+Fe+5678');
       expect(c.notes).toBe('Cliente actualizado');
+      expect(c.district).toBe('Palermo');
       expect(c.updatedAt.getTime()).toBe(later.getTime());
     });
 
@@ -103,7 +108,7 @@ describe('Customer', () => {
       const c = createValidCustomer();
       const later = new Date('2026-06-01T12:00:00Z');
 
-      c.updateProfile(c.name, null, null, null, null, null, null, later);
+      c.updateProfile(c.name, null, null, null, null, null, null, null, later);
 
       expect(c.email).toBeNull();
       expect(c.phone).toBeNull();
@@ -111,12 +116,13 @@ describe('Customer', () => {
       expect(c.address).toBeNull();
       expect(c.googleMapsUrl).toBeNull();
       expect(c.notes).toBeNull();
+      expect(c.district).toBeNull();
     });
 
     it('rejects empty name on update', () => {
       const c = createValidCustomer();
       expect(() =>
-        { c.updateProfile('', null, null, null, null, null, null, new Date()); }
+        { c.updateProfile('', null, null, null, null, null, null, null, new Date()); }
       ).toThrow('El nombre del cliente es obligatorio');
     });
   });

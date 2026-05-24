@@ -2,6 +2,7 @@
  * Mapper between the domain `Customer` and the TypeORM `CustomerEntity`.
  *
  * Phase 8: Added alias, address, googleMapsUrl, notes.
+ * SDD constancias: Added district.
  */
 import type { BaseMapper } from '../../../../infrastructure/typeorm/mappers/BaseMapper.js';
 import { Customer } from '../../domain/Customer.js';
@@ -19,6 +20,7 @@ export class CustomerMapper implements BaseMapper<Customer, CustomerEntity> {
       entity.address,
       entity.googleMapsUrl,
       entity.notes,
+      entity.district,
       entity.createdAt,
       entity.updatedAt,
     );
@@ -34,6 +36,7 @@ export class CustomerMapper implements BaseMapper<Customer, CustomerEntity> {
     entity.address = domain.address;
     entity.googleMapsUrl = domain.googleMapsUrl;
     entity.notes = domain.notes;
+    entity.district = domain.district;
     return entity;
   }
 }

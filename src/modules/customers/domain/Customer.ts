@@ -10,6 +10,7 @@
  * - email, phone: Contact information.
  * - alias: Optional nickname/short name for quick reference.
  * - address: Physical or shipping address.
+ * - district: Neighbourhood/district of the address (e.g. "CABA", "Palermo").
  * - googleMapsUrl: Link to the customer's location on Google Maps.
  * - notes: Free-text notes about the customer.
  */
@@ -34,6 +35,7 @@ export class Customer {
     private _address: string | null,
     private _googleMapsUrl: string | null,
     private _notes: string | null,
+    private _district: string | null,
     private readonly _createdAt: Date,
     private _updatedAt: Date,
   ) {
@@ -76,6 +78,10 @@ export class Customer {
     return this._notes;
   }
 
+  get district(): string | null {
+    return this._district;
+  }
+
   get createdAt(): Date {
     return this._createdAt;
   }
@@ -98,6 +104,7 @@ export class Customer {
     address: string | null,
     googleMapsUrl: string | null,
     notes: string | null,
+    district: string | null,
     updatedAt: Date,
   ): void {
     if (!name || name.trim().length === 0) {
@@ -110,6 +117,7 @@ export class Customer {
     this._address = address;
     this._googleMapsUrl = googleMapsUrl;
     this._notes = notes;
+    this._district = district;
     this._updatedAt = updatedAt;
   }
 

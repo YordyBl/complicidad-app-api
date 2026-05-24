@@ -27,7 +27,7 @@ export class CustomerController {
    * POST /customers — create a new customer.
    */
   async create(req: Request, res: Response): Promise<void> {
-    const { name, email, phone, alias, address, googleMapsUrl, notes } = req.body as Record<string, unknown>;
+    const { name, email, phone, alias, address, googleMapsUrl, notes, district } = req.body as Record<string, unknown>;
 
     // Basic type validation
     if (typeof name !== 'string') {
@@ -43,6 +43,7 @@ export class CustomerController {
       address: typeof address === 'string' ? address : null,
       googleMapsUrl: typeof googleMapsUrl === 'string' ? googleMapsUrl : null,
       notes: typeof notes === 'string' ? notes : null,
+      district: typeof district === 'string' ? district : null,
     });
 
     if (!result.ok) {
@@ -94,7 +95,7 @@ export class CustomerController {
       res.status(400).json({ error: 'ValidationError', message: 'El ID de cliente es obligatorio' });
       return;
     }
-    const { name, email, phone, alias, address, googleMapsUrl, notes } = req.body as Record<string, unknown>;
+    const { name, email, phone, alias, address, googleMapsUrl, notes, district } = req.body as Record<string, unknown>;
 
     if (typeof name !== 'string') {
       res.status(400).json({ error: 'ValidationError', message: 'name es obligatorio y debe ser un string' });
@@ -110,6 +111,7 @@ export class CustomerController {
       address: typeof address === 'string' ? address : null,
       googleMapsUrl: typeof googleMapsUrl === 'string' ? googleMapsUrl : null,
       notes: typeof notes === 'string' ? notes : null,
+      district: typeof district === 'string' ? district : null,
     });
 
     if (!result.ok) {
