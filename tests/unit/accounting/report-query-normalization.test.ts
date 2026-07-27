@@ -1,11 +1,16 @@
 /**
- * Unit tests for the monetary aggregate normalization helper.
+ * Unit tests for the monetary aggregate normalization helper
+ * and report list query normalization.
  *
  * Verifies that raw DB outputs (number, string, null) are always
- * coerced to integer cents before entering domain/application.
+ * coerced to integer cents before entering domain/application,
+ * and that report list query params receive safe defaults.
  */
 import { describe, it, expect } from 'vitest';
-import { normalizeCents } from '../../../src/modules/accounting-reports/infrastructure/typeorm/ReportQueryAdapter.js';
+import {
+  normalizeCents,
+  normalizeReportListQuery,
+} from '../../../src/modules/accounting-reports/infrastructure/typeorm/ReportQueryAdapter.js';
 
 describe('normalizeCents', () => {
   // ── Null/undefined → zero ────────────────────────────
@@ -79,5 +84,86 @@ describe('normalizeCents', () => {
     const row: Record<string, unknown> = { investment_cents: 12345 };
     const result = normalizeCents(row.investment_cents);
     expect(result).toBe(12345);
+  });
+});
+
+// ── Report list query normalization ──────────────────────────
+
+describe('normalizeReportListQuery', () => {
+  it('returns defaults when called with empty object', () => {
+    const result = normalizeReportListQuery({});
+    expect(result).toEqual({
+      page: 1,
+      pageSize: 5,
+      search: '',
+    });
+  });
+
+  it('returns defaults when called with undefined', () => {
+    const result = normalizeReportListQuery(undefined);
+    expect(result).toEqual({
+      page: 1,
+      pageSize: 5,
+      search: '',
+    });
+  });
+
+  it('parses valid page and pageSize from string query params', () => {
+    const result = normalizeReportListQuery({
+      page: '3',
+      pageSize: '10',
+      search: 'foo',
+    });
+    expect(result).toEqual({
+      page: 3,
+      pageSize: 10,
+      search: 'foo',
+    });
+  });
+
+  it('trims whitespace from search', () => {
+    const result = normalizeReportListQuery({
+      search: '  hello world  ',
+    });
+    expect(result.search).toBe('hello world');
+  });
+
+  it('defaults page=1 when given non-numeric value', () => {
+    const result = normalizeReportListQuery({ page: 'abc' });
+    expect(result.page).toBe(1);
+  });
+
+  it('defaults page=1 when given zero', () => {
+    const result = normalizeReportListQuery({ page: '0' });
+    expect(result.page).toBe(1);
+  });
+
+  it('defaults page=1 when given negative', () => {
+    const result = normalizeReportListQuery({ page: '-5' });
+    expect(result.page).toBe(1);
+  });
+
+  it('clamps pageSize to minimum 1', () => {
+    const result = normalizeReportListQuery({ pageSize: '0' });
+    expect(result.pageSize).toBe(1);
+  });
+
+  it('clamps pageSize to maximum 100', () => {
+    const result = normalizeReportListQuery({ pageSize: '200' });
+    expect(result.pageSize).toBe(100);
+  });
+
+  it('parses numeric values correctly', () => {
+    const result = normalizeReportListQuery({ page: 2, pageSize: 20 });
+    expect(result).toEqual({
+      page: 2,
+      pageSize: 20,
+      search: '',
+    });
+  });
+
+  it('handles null/empty search as empty string', () => {
+    const result = normalizeReportListQuery({ search: undefined });
+    expect(result.search).toBe('');
   });
 });

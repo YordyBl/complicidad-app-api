@@ -48,6 +48,23 @@ export interface LotReportItem {
   status: 'OPEN' | 'EXHAUSTED';
 }
 
+// ── List query DTOs ──────────────────────────────────────────
+
+export interface ReportListQuery {
+  page: number;
+  pageSize: number;
+  search: string;
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  search: string;
+}
+
 // ── Port ──────────────────────────────────────────────────────
 
 export interface ReportReadRepository {
@@ -81,13 +98,13 @@ export interface ReportReadRepository {
 
   /**
    * Stock grouped by product and variant with remaining quantities
-   * and investment values.
+   * and investment values, filtered and paginated.
    */
-  getStockByProduct(): Promise<StockByProductItem[]>;
+  getStockByProduct(query: ReportListQuery): Promise<PaginatedResponse<StockByProductItem>>;
 
   /**
    * All inventory lots with their current status (OPEN / EXHAUSTED)
-   * and remaining quantities.
+   * and remaining quantities, filtered and paginated.
    */
-  getLots(): Promise<LotReportItem[]>;
+  getLots(query: ReportListQuery): Promise<PaginatedResponse<LotReportItem>>;
 }

@@ -29,6 +29,8 @@ import type {
   ReportReadRepository,
   StockByProductItem,
   LotReportItem,
+  ReportListQuery,
+  PaginatedResponse,
 } from '../../../src/modules/accounting-reports/domain/ReportReadRepository.js';
 import type { CashClosingRepository } from '../../../src/modules/accounting-reports/domain/CashClosingRepository.js';
 import type { CashClosing } from '../../../src/modules/accounting-reports/domain/CashClosing.js';
@@ -64,12 +66,62 @@ class FakeReportReadRepository implements ReportReadRepository {
     return this.reinvestmentCentsValue;
   }
 
-  async getStockByProduct(): Promise<StockByProductItem[]> {
-    return this.stockByProductValue;
+  async getStockByProduct(
+    query: ReportListQuery,
+  ): Promise<PaginatedResponse<StockByProductItem>> {
+    // Apply search filter on fake data
+    let filtered = this.stockByProductValue;
+    if (query.search) {
+      const s = query.search.toLowerCase();
+      filtered = filtered.filter(
+        (item) =>
+          item.productName.toLowerCase().includes(s) ||
+          item.sku.toLowerCase().includes(s),
+      );
+    }
+
+    const totalItems = filtered.length;
+    const totalPages = totalItems > 0 ? Math.ceil(totalItems / query.pageSize) : 0;
+    const offset = (query.page - 1) * query.pageSize;
+    const items = filtered.slice(offset, offset + query.pageSize);
+
+    return {
+      items,
+      page: query.page,
+      pageSize: query.pageSize,
+      totalItems,
+      totalPages,
+      search: query.search,
+    };
   }
 
-  async getLots(): Promise<LotReportItem[]> {
-    return this.lotsValue;
+  async getLots(
+    query: ReportListQuery,
+  ): Promise<PaginatedResponse<LotReportItem>> {
+    // Apply search filter on fake data
+    let filtered = this.lotsValue;
+    if (query.search) {
+      const s = query.search.toLowerCase();
+      filtered = filtered.filter(
+        (lot) =>
+          lot.productName.toLowerCase().includes(s) ||
+          lot.sku.toLowerCase().includes(s),
+      );
+    }
+
+    const totalItems = filtered.length;
+    const totalPages = totalItems > 0 ? Math.ceil(totalItems / query.pageSize) : 0;
+    const offset = (query.page - 1) * query.pageSize;
+    const items = filtered.slice(offset, offset + query.pageSize);
+
+    return {
+      items,
+      page: query.page,
+      pageSize: query.pageSize,
+      totalItems,
+      totalPages,
+      search: query.search,
+    };
   }
 }
 
@@ -323,27 +375,30 @@ describe('GetStockByProductUseCase', () => {
   let repo: FakeReportReadRepository;
   let useCase: GetStockByProductUseCase;
 
+  const defaultQuery: ReportListQuery = { page: 1, pageSize: 10, search: '' };
+
   beforeEach(() => {
     repo = new FakeReportReadRepository();
     useCase = new GetStockByProductUseCase(repo);
   });
 
-  it('returns stock grouped by product with totals', async () => {
+  it('returns stock grouped by product with paginated envelope', async () => {
     repo.stockByProductValue = [
       makeStockItem({ productName: 'Product A', investmentCents: 50000 }),
       makeStockItem({ productName: 'Product B', productId: 'prod-2', variantId: 'var-2', sku: 'SKU-B', investmentCents: 30000 }),
     ];
 
-    const result = await useCase.execute();
+    const result = await useCase.execute(defaultQuery);
     expect(result.items).toHaveLength(2);
-    expect(result.totalInvestmentCents).toBe(80000);
+    expect(result.totalItems).toBe(2);
+    expect(result.page).toBe(1);
   });
 
-  it('returns empty list when no stock exists', async () => {
+  it('returns empty items when no stock exists', async () => {
     repo.stockByProductValue = [];
-    const result = await useCase.execute();
+    const result = await useCase.execute(defaultQuery);
     expect(result.items).toHaveLength(0);
-    expect(result.totalInvestmentCents).toBe(0);
+    expect(result.totalItems).toBe(0);
   });
 });
 
@@ -351,30 +406,30 @@ describe('GetLotsUseCase', () => {
   let repo: FakeReportReadRepository;
   let useCase: GetLotsUseCase;
 
+  const defaultQuery: ReportListQuery = { page: 1, pageSize: 10, search: '' };
+
   beforeEach(() => {
     repo = new FakeReportReadRepository();
     useCase = new GetLotsUseCase(repo);
   });
 
-  it('separates open and exhausted lots', async () => {
+  it('returns all lots in paginated envelope', async () => {
     repo.lotsValue = [
       makeLotItem({ lotId: 'lot-1', remainingQuantity: 30, status: 'OPEN' }),
       makeLotItem({ lotId: 'lot-2', remainingQuantity: 0, status: 'EXHAUSTED' }),
       makeLotItem({ lotId: 'lot-3', remainingQuantity: 10, status: 'OPEN' }),
     ];
 
-    const result = await useCase.execute();
-    expect(result.open).toHaveLength(2);
-    expect(result.exhausted).toHaveLength(1);
-    expect(result.totalOpenCount).toBe(2);
-    expect(result.totalExhaustedCount).toBe(1);
+    const result = await useCase.execute(defaultQuery);
+    expect(result.items).toHaveLength(3);
+    expect(result.totalItems).toBe(3);
   });
 
-  it('returns empty lists when no lots exist', async () => {
+  it('returns empty items when no lots exist', async () => {
     repo.lotsValue = [];
-    const result = await useCase.execute();
-    expect(result.open).toHaveLength(0);
-    expect(result.exhausted).toHaveLength(0);
+    const result = await useCase.execute(defaultQuery);
+    expect(result.items).toHaveLength(0);
+    expect(result.totalItems).toBe(0);
   });
 });
 

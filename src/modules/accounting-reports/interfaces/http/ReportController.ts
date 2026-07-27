@@ -3,6 +3,9 @@
  *
  * Translates between HTTP request/responses and the application use cases.
  * No domain logic here — just request parsing, validation, and response shaping.
+ *
+ * Maps internal DTO field names to canonical frontend-facing HTTP contract
+ * field names at this boundary.
  */
 import type { Request, Response } from 'express';
 import type { GetLiquidityUseCase } from '../../application/use-cases/GetLiquidityUseCase.js';
@@ -15,6 +18,7 @@ import type { GetOperatingCapitalUseCase } from '../../application/use-cases/Get
 import type { GetStockByProductUseCase } from '../../application/use-cases/GetStockByProductUseCase.js';
 import type { GetLotsUseCase } from '../../application/use-cases/GetLotsUseCase.js';
 import type { ManualCashCloseUseCase } from '../../application/use-cases/ManualCashCloseUseCase.js';
+import { normalizeReportListQuery } from '../../infrastructure/typeorm/ReportQueryAdapter.js';
 
 export class ReportController {
   constructor(
@@ -31,65 +35,100 @@ export class ReportController {
   ) {}
 
   // ── GET /reports/liquidity ──────────────────────────────────
+  // Canonical: { liquidityCents: number; currency: 'ARS' }
 
   async liquidity(_req: Request, res: Response): Promise<void> {
     const result = await this.getLiquidityUseCase.execute();
-    res.status(200).json(result);
+    res.status(200).json({
+      liquidityCents: result.liquidityCents,
+      currency: result.currency,
+    });
   }
 
   // ── GET /reports/stock-investment ───────────────────────────
+  // Canonical: { totalInvestmentCents: number; currency: 'ARS' }
 
   async stockInvestment(_req: Request, res: Response): Promise<void> {
     const result = await this.getStockInvestmentUseCase.execute();
-    res.status(200).json(result);
+    res.status(200).json({
+      totalInvestmentCents: result.stockInvestmentCents,
+      currency: result.currency,
+    });
   }
 
   // ── GET /reports/sales-total ────────────────────────────────
+  // Canonical: { totalSalesCents: number; currency: 'ARS'; activeSaleCount: number }
 
   async salesTotal(_req: Request, res: Response): Promise<void> {
     const result = await this.getSalesTotalUseCase.execute();
-    res.status(200).json(result);
+    res.status(200).json({
+      totalSalesCents: result.salesIncomeCents,
+      currency: result.currency,
+      activeSaleCount: result.activeSaleCount,
+    });
   }
 
   // ── GET /reports/fifo-cogs ──────────────────────────────────
+  // Canonical: { totalCogsCents: number; currency: 'ARS' }
 
   async fifoCosts(_req: Request, res: Response): Promise<void> {
     const result = await this.getFifoCostsUseCase.execute();
-    res.status(200).json(result);
+    res.status(200).json({
+      totalCogsCents: result.fifoCostsCents,
+      currency: result.currency,
+    });
   }
 
   // ── GET /reports/gross-profit ───────────────────────────────
+  // Canonical: { grossProfitCents: number; currency: 'ARS' }
 
   async grossProfit(_req: Request, res: Response): Promise<void> {
     const result = await this.getGrossProfitUseCase.execute();
-    res.status(200).json(result);
+    res.status(200).json({
+      grossProfitCents: result.grossProfitCents,
+      currency: result.currency,
+    });
   }
 
   // ── GET /reports/reinvestment ───────────────────────────────
+  // Canonical: { reinvestmentCents: number; currency: 'ARS' }
 
   async reinvestment(_req: Request, res: Response): Promise<void> {
     const result = await this.getReinvestmentUseCase.execute();
-    res.status(200).json(result);
+    res.status(200).json({
+      reinvestmentCents: result.reinvestmentCents,
+      currency: result.currency,
+    });
   }
 
   // ── GET /reports/operating-capital ──────────────────────────
+  // Canonical: { operatingCapitalCents: number; currency: 'ARS' }
 
   async operatingCapital(_req: Request, res: Response): Promise<void> {
     const result = await this.getOperatingCapitalUseCase.execute();
-    res.status(200).json(result);
+    res.status(200).json({
+      operatingCapitalCents: result.operatingCapitalCents,
+      currency: result.currency,
+    });
   }
 
   // ── GET /reports/stock-by-product ───────────────────────────
+  // Canonical: PaginatedResponse<StockByProductItem> with query defaults
 
-  async stockByProduct(_req: Request, res: Response): Promise<void> {
-    const result = await this.getStockByProductUseCase.execute();
+  async stockByProduct(req: Request, res: Response): Promise<void> {
+    const rawQuery = req.query as Record<string, unknown>;
+    const query = normalizeReportListQuery(rawQuery);
+    const result = await this.getStockByProductUseCase.execute(query);
     res.status(200).json(result);
   }
 
   // ── GET /reports/lots ───────────────────────────────────────
+  // Canonical: PaginatedResponse<LotReportItem> with query defaults
 
-  async lots(_req: Request, res: Response): Promise<void> {
-    const result = await this.getLotsUseCase.execute();
+  async lots(req: Request, res: Response): Promise<void> {
+    const rawQuery = req.query as Record<string, unknown>;
+    const query = normalizeReportListQuery(rawQuery);
+    const result = await this.getLotsUseCase.execute(query);
     res.status(200).json(result);
   }
 

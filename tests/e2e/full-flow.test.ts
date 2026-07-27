@@ -76,7 +76,7 @@ import { GetReinvestmentUseCase } from '../../src/modules/accounting-reports/app
 import { GetOperatingCapitalUseCase } from '../../src/modules/accounting-reports/application/use-cases/GetOperatingCapitalUseCase.js';
 import { ReportController } from '../../src/modules/accounting-reports/interfaces/http/ReportController.js';
 import { createReportRouter } from '../../src/modules/accounting-reports/interfaces/http/report-routes.js';
-import type { ReportReadRepository } from '../../src/modules/accounting-reports/domain/ReportReadRepository.js';
+import type { ReportReadRepository, ReportListQuery, PaginatedResponse, StockByProductItem, LotReportItem } from '../../src/modules/accounting-reports/domain/ReportReadRepository.js';
 import type { CashClosingRepository } from '../../src/modules/accounting-reports/domain/CashClosingRepository.js';
 import { ManualCashCloseUseCase } from '../../src/modules/accounting-reports/application/use-cases/ManualCashCloseUseCase.js';
 import { GetStockByProductUseCase } from '../../src/modules/accounting-reports/application/use-cases/GetStockByProductUseCase.js';
@@ -319,12 +319,12 @@ class FakeReportRepo implements ReportReadRepository {
     return total;
   }
 
-  async getStockByProduct(): Promise<import('../../src/modules/accounting-reports/domain/ReportReadRepository.js').StockByProductItem[]> {
-    return [];
+  async getStockByProduct(_query: ReportListQuery): Promise<PaginatedResponse<StockByProductItem>> {
+    return { items: [], page: _query.page, pageSize: _query.pageSize, totalItems: 0, totalPages: 0, search: _query.search };
   }
 
-  async getLots(): Promise<import('../../src/modules/accounting-reports/domain/ReportReadRepository.js').LotReportItem[]> {
-    return [];
+  async getLots(_query: ReportListQuery): Promise<PaginatedResponse<LotReportItem>> {
+    return { items: [], page: _query.page, pageSize: _query.pageSize, totalItems: 0, totalPages: 0, search: _query.search };
   }
 }
 
@@ -574,16 +574,16 @@ describe('Full-flow E2E: login → purchase → sale → return → reports', ()
 
     const salesRes = await request(app).get('/reports/sales-total');
     expect(salesRes.status).toBe(200);
-    expect(salesRes.body.salesIncomeCents).toBe(16000);
+    expect(salesRes.body.totalSalesCents).toBe(16000);
 
     const cogsRes = await request(app).get('/reports/fifo-cogs');
     expect(cogsRes.status).toBe(200);
-    expect(cogsRes.body.fifoCostsCents).toBe(3900);
+    expect(cogsRes.body.totalCogsCents).toBe(3900);
 
     // Stock investment = 7*500 + 3*1200 = 3500 + 3600 = 7100
     const stockRes = await request(app).get('/reports/stock-investment');
     expect(stockRes.status).toBe(200);
-    expect(stockRes.body.stockInvestmentCents).toBe(7100);
+    expect(stockRes.body.totalInvestmentCents).toBe(7100);
 
     // Gross profit = 16000 - 3900 = 12100
     const profitRes = await request(app).get('/reports/gross-profit');
@@ -622,16 +622,16 @@ describe('Full-flow E2E: login → purchase → sale → return → reports', ()
     // ── Step 8: Verify reports after return ───────────────────
     const salesAfterRes = await request(app).get('/reports/sales-total');
     expect(salesAfterRes.status).toBe(200);
-    expect(salesAfterRes.body.salesIncomeCents).toBe(0);
+    expect(salesAfterRes.body.totalSalesCents).toBe(0);
 
     const cogsAfterRes = await request(app).get('/reports/fifo-cogs');
     expect(cogsAfterRes.status).toBe(200);
-    expect(cogsAfterRes.body.fifoCostsCents).toBe(0);
+    expect(cogsAfterRes.body.totalCogsCents).toBe(0);
 
     // Stock investment = 10*500 + 5*1200 = 11000
     const stockAfterRes = await request(app).get('/reports/stock-investment');
     expect(stockAfterRes.status).toBe(200);
-    expect(stockAfterRes.body.stockInvestmentCents).toBe(11000);
+    expect(stockAfterRes.body.totalInvestmentCents).toBe(11000);
   });
 
   it('should return 404 for sale with missing customer', async () => {

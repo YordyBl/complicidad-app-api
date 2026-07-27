@@ -1,31 +1,23 @@
 /**
- * Application use case: Get Open / Exhausted Lots.
+ * Application use case: Get Lots (paginated).
  *
  * Returns all FIFO inventory lots with their current status
- * (OPEN or EXHAUSTED) and remaining quantities.
+ * (OPEN or EXHAUSTED) and remaining quantities, filtered
+ * by search and paginated.
  */
-import type { ReportReadRepository, LotReportItem } from '../../domain/ReportReadRepository.js';
+import type {
+  ReportReadRepository,
+  ReportListQuery,
+  LotReportItem,
+  PaginatedResponse,
+} from '../../domain/ReportReadRepository.js';
 
-export interface LotsResult {
-  open: LotReportItem[];
-  exhausted: LotReportItem[];
-  totalOpenCount: number;
-  totalExhaustedCount: number;
-}
+export type LotsResult = PaginatedResponse<LotReportItem>;
 
 export class GetLotsUseCase {
   constructor(private readonly reportRepo: ReportReadRepository) {}
 
-  async execute(): Promise<LotsResult> {
-    const allLots = await this.reportRepo.getLots();
-    const open = allLots.filter((l) => l.status === 'OPEN');
-    const exhausted = allLots.filter((l) => l.status === 'EXHAUSTED');
-
-    return {
-      open,
-      exhausted,
-      totalOpenCount: open.length,
-      totalExhaustedCount: exhausted.length,
-    };
+  async execute(query: ReportListQuery): Promise<LotsResult> {
+    return this.reportRepo.getLots(query);
   }
 }
